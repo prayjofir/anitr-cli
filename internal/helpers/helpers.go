@@ -29,6 +29,37 @@ func IsValidImage(url string) bool {
 	return resp.StatusCode == 200 && strings.HasPrefix(contentType, "image/")
 }
 
+func Slugify(s string) string {
+	// Türkçe karakterleri İngilizce karşılıkları ile değiştir
+	replacements := map[string]string{
+		"Ü": "U",
+		"İ": "I",
+		"Ğ": "G",
+		"Ş": "S",
+		"ü": "u",
+		"ı": "i",
+		"ğ": "g",
+		"ş": "s",
+		"ö": "o",
+		"Ö": "O",
+		"ç": "c",
+		"Ç": "C",
+	}
+
+	for k, v := range replacements {
+		s = strings.ReplaceAll(s, k, v)
+	}
+
+	// Boşlukları - ile değiştir
+	s = strings.ReplaceAll(s, " ", "-")
+
+	// -, ", ' dışındaki tüm ASCII karakterleri sil
+	re := regexp.MustCompile(`[^a-zA-Z0-9\-"']`)
+	s = re.ReplaceAllString(s, "")
+
+	return s
+}
+
 // Ptr, verilen değerin pointer'ını döner (herhangi bir tip için).
 func Ptr[T any](val T) *T {
 	return &val

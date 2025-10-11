@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/axrona/anitr-cli/internal"
+	"github.com/axrona/anitr-cli/internal/helpers"
 	"github.com/axrona/anitr-cli/internal/models"
 )
 
@@ -44,8 +45,7 @@ func (a AnimeCix) Source() string {
 // GetSearchData, verilen sorguya göre anime verilerini döner
 func (a AnimeCix) GetSearchData(query string) ([]models.Anime, error) {
 	// Türkçe karakterleri ASCII'ye dönüştür ve boşlukları "-" ile değiştir
-	// normalizedQuery := helpers.NormalizeTurkishToASCII(query)
-	normalizedQuery := strings.ReplaceAll(query, " ", "-")
+	normalizedQuery := helpers.Slugify(query)
 
 	// Anime arama verilerini al
 	data, err := FetchAnimeSearchData(normalizedQuery)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/axrona/anitr-cli/internal"
+	"github.com/axrona/anitr-cli/internal/helpers"
 	"github.com/axrona/anitr-cli/internal/models"
 )
 
@@ -25,8 +26,8 @@ func (o OpenAnime) Source() string {
 // GetSearchData, verilen sorguya göre anime verilerini döner
 func (o OpenAnime) GetSearchData(query string) ([]models.Anime, error) {
 	// Türkçe karakterleri ASCII'ye dönüştür ve boşlukları "+" ile değiştir
-	// normalizedQuery := helpers.NormalizeTurkishToASCII(query)
-	normalizedQuery := strings.ReplaceAll(query, " ", "+")
+	normalizedQuery := helpers.Slugify(query)
+	normalizedQuery = strings.ReplaceAll(normalizedQuery, "-", "+")
 
 	// Arama URL'sini oluştur ve JSON verisini al
 	url := fmt.Sprintf("%s/anime/search?q=%s", configOpenAnime.BaseUrl, normalizedQuery)
