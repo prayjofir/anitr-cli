@@ -23,8 +23,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// var RegisteredActions models.AppActions = Actions{}
-
 // Ana uygulama döngüsünü yöneten fonksiyon
 func runMain(cmd *cobra.Command, f *flags.Flags, UiMode string, Logger *models.LogServ) {
 	// RPC'yi devre dışı bırakma bayrağı ayarlanır
