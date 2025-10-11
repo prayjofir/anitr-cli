@@ -6,6 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+
+	"github.com/axrona/anitr-cli/internal/config"
+	"github.com/axrona/anitr-cli/internal/utils"
 )
 
 // Sentinel error tipleri
@@ -18,6 +22,28 @@ var (
 type Downloader struct {
 	BinPath string
 	BaseDir string
+}
+
+func VideosDir() string {
+	cfg, err := config.LoadConfig(filepath.Join(utils.ConfigDir(), "config.json"))
+	if err == nil && cfg.DownloadDir != "" {
+		return cfg.DownloadDir
+	}
+
+	// fallback → eski davranış
+	if runtime.GOOS == "windows" {
+		userProfile := os.Getenv("USERPROFILE")
+		if userProfile == "" {
+			userProfile = "."
+		}
+		return filepath.Join(userProfile, "Videos")
+	} else {
+		home := os.Getenv("HOME")
+		if home == "" {
+			home = "."
+		}
+		return filepath.Join(home, "Videos")
+	}
 }
 
 // NewDownloader -> Downloader oluşturur, gerekli binary ve klasörleri kontrol eder

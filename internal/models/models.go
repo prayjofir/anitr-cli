@@ -1,6 +1,24 @@
 // models paketi, anime verilerini ve ilgili yapılarını tanımlar.
 package models
 
+import (
+	"log"
+	"os"
+	"time"
+)
+
+// Uygulama durumu ve ayarlarını saklayan struct
+type App struct {
+	Source         *AnimeSource
+	SelectedSource *string
+	UiMode         *string
+	RofiFlags      *string
+	DisableRPC     *bool
+	AnimeHistory   *AnimeHistory
+	HistoryLimit   int
+	Logger         *LogServ
+}
+
 // AnimeSource arayüzü, farklı anime kaynaklarından veri çekme işlevlerini tanımlar.
 type AnimeSource interface {
 	// Arama sorgusuna göre anime verilerini getirir.
@@ -16,6 +34,45 @@ type AnimeSource interface {
 	// Kaynağın adını döner.
 	Source() string
 }
+
+type AppActions interface {
+	MainMenu(cfx *App, timestamp time.Time)
+	PlayAnimeLoop(
+		source AnimeSource, // Seçilen anime kaynağı (OpenAnime, AnimeciX)
+		SelectedSource string, // Seçilen kaynak ismi
+		episodes []Episode, // Tüm bölümler
+		episodeNames []string, // Bölüm adları
+		selectedAnimeID int, // Seçilen anime ID'si (AnimeciX için)
+		selectedAnimeSlug string, // Seçilen anime slug'ı (OpenAnime için)
+		selectedAnimeName string, // Seçilen anime ismi
+		isMovie bool, // Film mi yoksa dizi mi olduğunu belirtir
+		selectedSeasonIndex int, // Seçilen sezonun index'i
+		UiMode string, // Arayüz tipi (örneğin terminal, rofi, vs.)
+		RofiFlags string, // Rofi için özel bayraklar
+		posterURL string, // Poster görseli URL'si (Discord RPC için)
+		DisableRPC bool, // Discord RPC devre dışı mı?
+		timestamp time.Time, // Discord RPC timestamp
+		AnimeHistory AnimeHistory, // Geçmiş veri tipi
+		Logger *LogServ, // Logger
+	) (AnimeSource, string, error)
+}
+
+// LogServ, hata ve mesajları bir dosyaya yazmak için yapılandırılmış bir log yapısıdır.
+type LogServ struct {
+	File *os.File    // Log dosyasının kendisi
+	Log  *log.Logger // Log işlemini gerçekleştiren nesne
+}
+
+// AnimeHistoryEntry, her anime için tutulacak bilgiler
+type AnimeHistoryEntry struct {
+	LastEpisodeIdx  *int       `json:"lastEpisodeIdx"`
+	LastEpisodeName string     `json:"lastEpisodeName"`
+	AnimeId         *string    `json:"animeId"`
+	LastWatched     *time.Time `json:"lastWatched"`
+}
+
+// AnimeHistory, source -> anime adı -> struct
+type AnimeHistory map[string]map[string]AnimeHistoryEntry
 
 // Anime yapısı, bir anime hakkında temel bilgileri içerir.
 type Anime struct {

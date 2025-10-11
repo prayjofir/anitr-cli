@@ -1,4 +1,4 @@
-package utils
+package history
 
 import (
 	"encoding/json"
@@ -7,35 +7,26 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/axrona/anitr-cli/internal/models"
 	"github.com/axrona/anitr-cli/internal/player"
+	"github.com/axrona/anitr-cli/internal/utils"
 )
-
-// AnimeHistoryEntry, her anime için tutulacak bilgiler
-type AnimeHistoryEntry struct {
-	LastEpisodeIdx  *int       `json:"lastEpisodeIdx"`
-	LastEpisodeName string     `json:"lastEpisodeName"`
-	AnimeId         *string    `json:"animeId"`
-	LastWatched     *time.Time `json:"lastWatched"`
-}
-
-// AnimeHistory, source -> anime adı -> struct
-type AnimeHistory map[string]map[string]AnimeHistoryEntry
 
 // getHistoryPath cross-platform olarak history.json yolunu döndürür
 func getHistoryPath() (string, error) {
-    // ConfigDir() ile aynı yeri kullanarak platformlar arasında tutarlılık sağlar.
-    historyDir := ConfigDir()
+	// ConfigDir() ile aynı yeri kullanarak platformlar arasında tutarlılık sağlar.
+	historyDir := utils.ConfigDir()
 
-    // Klasör yoksa oluştur
-    if err := os.MkdirAll(historyDir, 0o755); err != nil {
-        return "", fmt.Errorf("history klasörü oluşturulamadı: %w", err)
-    }
+	// Klasör yoksa oluştur
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
+		return "", fmt.Errorf("history klasörü oluşturulamadı: %w", err)
+	}
 
-    return filepath.Join(historyDir, "history.json"), nil
+	return filepath.Join(historyDir, "history.json"), nil
 }
 
 // ReadAnimeHistory history.json'u okur, yoksa yeni oluşturur
-func ReadAnimeHistory() (AnimeHistory, error) {
+func ReadAnimeHistory() (models.AnimeHistory, error) {
 	path, err := getHistoryPath()
 	if err != nil {
 		return nil, err
@@ -44,12 +35,12 @@ func ReadAnimeHistory() (AnimeHistory, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(AnimeHistory), nil
+			return make(models.AnimeHistory), nil
 		}
 		return nil, fmt.Errorf("history okunamadı: %w", err)
 	}
 
-	var history AnimeHistory
+	var history models.AnimeHistory
 	if err := json.Unmarshal(data, &history); err != nil {
 		return nil, fmt.Errorf("history parse edilemedi: %w", err)
 	}
@@ -57,7 +48,7 @@ func ReadAnimeHistory() (AnimeHistory, error) {
 }
 
 // WriteAnimeHistory history.json'u yazar
-func WriteAnimeHistory(history AnimeHistory) error {
+func WriteAnimeHistory(history models.AnimeHistory) error {
 	path, err := getHistoryPath()
 	if err != nil {
 		return err
@@ -73,7 +64,7 @@ func WriteAnimeHistory(history AnimeHistory) error {
 }
 
 // UpdateAnimeHistory, mevcut MPV oturumu sırasında animeyi history.json'a kaydeder
-func UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId string, episodeIndex int, logger *Logger) {
+func UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId string, episodeIndex int, logserv *models.LogServ) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -102,23 +93,23 @@ func UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId stri
 		if progress >= duration-300 { // son 5 dakika
 			history, err := ReadAnimeHistory()
 			if err != nil {
-				logger.LogError(err)
+				utils.LogError(logserv, err)
 				continue
 			}
 
 			sourceEntry, ok := history[source]
 			if !ok {
-				sourceEntry = make(map[string]AnimeHistoryEntry)
+				sourceEntry = make(map[string]models.AnimeHistoryEntry)
 			}
 
 			animeEntry, ok := sourceEntry[animeName]
 			if !ok {
-				animeEntry = AnimeHistoryEntry{}
+				animeEntry = models.AnimeHistoryEntry{}
 			}
 
 			time := time.Now()
 
-			animeEntry = AnimeHistoryEntry{
+			animeEntry = models.AnimeHistoryEntry{
 				LastEpisodeIdx:  &episodeIndex,
 				LastEpisodeName: episodeName,
 				AnimeId:         &animeId,
@@ -128,7 +119,7 @@ func UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId stri
 			history[source] = sourceEntry
 
 			if err := WriteAnimeHistory(history); err != nil {
-				logger.LogError(err)
+				utils.LogError(logserv, err)
 				continue
 			}
 			updated = true
