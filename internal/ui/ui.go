@@ -110,3 +110,10 @@ func ShowLoading(params internal.UiParams, message string, done chan struct{}) {
 		tui.ShowSpinner(message, done)
 	}
 }
+
+// Loading mesajını günceller
+func UpdateLoadingMessage(params internal.UiParams, message string) {
+	if params.Mode == "tui" {
+		tui.UpdateSpinnerMessage(message)
+	}
+}

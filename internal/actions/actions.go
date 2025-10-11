@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -68,7 +69,7 @@ func PlayAnimeLoop(
 		// Kullanıcıya sunulacak menü seçenekleri
 		watchMenu := []string{}
 		if !isMovie {
-			watchMenu = append(watchMenu, "İzle", "Sonraki bölüm", "Önceki bölüm", "Bölüm seç", "Çözünürlük seç", "Bölüm indir")
+			watchMenu = append(watchMenu, "İzle", "Sonraki bölüm", "Önceki bölüm", "Bölüm seç", "Tüm sezonu izle", "────────────────────", "Çözünürlük seç", "Bölüm indir")
 		} else {
 			watchMenu = append(watchMenu, "İzle", "Çözünürlük seç", "Movie indir")
 		}
@@ -389,6 +390,194 @@ func PlayAnimeLoop(
 			}
 			selectedFansubIdx = slices.Index(fansubNames, selected)
 
+		// Tüm sezonu playlist olarak izle
+		case "Tüm sezonu izle":
+			ui.ClearScreen()
+
+			// Sezonları topla ve kullanıcıya seçtir
+			seasonMap := make(map[int][]int) // season -> episode indices
+			for i, ep := range episodes {
+				seasonNum := int(ep.Extra["season_num"].(float64))
+				seasonMap[seasonNum] = append(seasonMap[seasonNum], i)
+			}
+
+			// Sezon listesi oluştur
+			var seasonNumbers []int
+			for seasonNum := range seasonMap {
+				seasonNumbers = append(seasonNumbers, seasonNum)
+			}
+			sort.Ints(seasonNumbers)
+
+			// Sezon seçenekleri
+			var seasonOptions []string
+			for _, seasonNum := range seasonNumbers {
+				episodeCount := len(seasonMap[seasonNum])
+				seasonOptions = append(seasonOptions, fmt.Sprintf("Sezon %d (%d bölüm)", seasonNum, episodeCount))
+			}
+
+			// Kullanıcıdan sezon seçimi al
+			selectedSeasonOption, err := utils.ShowSelection(models.App{UiMode: &UiMode, RofiFlags: &RofiFlags}, seasonOptions, "Sezon seç")
+			if errors.Is(err, tui.ErrGoBack) {
+				continue
+			}
+			if !utils.CheckErr(internal.UiParams{
+				Mode:      UiMode,
+				RofiFlags: &RofiFlags,
+			}, err, Logger) {
+				continue
+			}
+
+			// Seçilen sezonu bul
+			selectedSeasonIdx := -1
+			for i, option := range seasonOptions {
+				if option == selectedSeasonOption {
+					selectedSeasonIdx = i
+					break
+				}
+			}
+			if selectedSeasonIdx == -1 {
+				continue
+			}
+
+			selectedSeasonNum := seasonNumbers[selectedSeasonIdx]
+			seasonEpisodeIndices := seasonMap[selectedSeasonNum]
+
+			// Seçili sezonun bölümlerini filtrele
+			var seasonEpisodes []models.Episode
+			var seasonEpisodeNames []string
+			for _, idx := range seasonEpisodeIndices {
+				seasonEpisodes = append(seasonEpisodes, episodes[idx])
+				seasonEpisodeNames = append(seasonEpisodeNames, episodeNames[idx])
+			}
+
+			if len(seasonEpisodes) == 0 {
+				ui.ClearScreen()
+				fmt.Printf("\033[31m[!] Bu sezon için bölüm bulunamadı.\033[0m\n")
+				time.Sleep(1500 * time.Millisecond)
+				continue
+			}
+
+			// Loading spinner başlat
+			done := make(chan struct{})
+			go ui.ShowLoading(internal.UiParams{
+				Mode:      UiMode,
+				RofiFlags: &RofiFlags,
+			}, fmt.Sprintf("Sezon %d playlist hazırlanıyor... (%d bölüm)", selectedSeasonNum, len(seasonEpisodes)), done)
+
+			// Varsayılan çözünürlük seçimi
+			if selectedResolution == "" {
+				// İlk bölümden çözünürlük al
+				data, _, err := utils.UpdateWatchAPI(
+					strings.ToLower(SelectedSource),
+					[]models.Episode{seasonEpisodes[0]},
+					0,
+					selectedAnimeID,
+					selectedSeasonIndex,
+					selectedFansubIdx,
+					isMovie,
+					&selectedAnimeSlug,
+				)
+				if err != nil {
+					close(done)
+					ui.ClearScreen()
+					fmt.Printf("\033[31m[!] Çözünürlük bilgisi alınamadı: %s\033[0m\n", err)
+					time.Sleep(1500 * time.Millisecond)
+					continue
+				}
+				labels := data["labels"].([]string)
+				if len(labels) > 0 {
+					selectedResolution = labels[0]
+				}
+			}
+
+			// Progress callback fonksiyonu
+			progressCallback := func(current, total int, episodeName string) {
+				// Loading mesajını güncelle
+				ui.UpdateLoadingMessage(internal.UiParams{
+					Mode:      UiMode,
+					RofiFlags: &RofiFlags,
+				}, fmt.Sprintf("Sezon %d playlist hazırlanıyor... (%d/%d) %s", selectedSeasonNum, current, total, episodeName))
+			}
+
+			// Playlist verilerini topla
+			playlistParams, err := utils.GetSeasonPlaylistData(
+				strings.ToLower(SelectedSource),
+				seasonEpisodes,
+				selectedFansubIdx,
+				isMovie,
+				&selectedAnimeSlug,
+				selectedResolution,
+				selectedAnimeID,
+				seasonEpisodeNames,
+				selectedAnimeName,
+				Logger,
+				progressCallback,
+			)
+			if err != nil {
+				close(done)
+				ui.ClearScreen()
+				fmt.Printf("\033[31m[!] Playlist hazırlanamadı: %s\033[0m\n", err)
+				time.Sleep(1500 * time.Millisecond)
+				continue
+			}
+
+			// Loading spinner durdur
+			close(done)
+
+			// MPV ile playlist'i başlat
+			cmd, socketPath, err := player.PlayWithPlaylist(playlistParams)
+			if !utils.CheckErr(internal.UiParams{
+				Mode:      UiMode,
+				RofiFlags: &RofiFlags,
+			}, err, Logger) {
+				return source, SelectedSource, err
+			}
+
+			// MPV'nin çalışıp çalışmadığını kontrol et
+			maxAttempts := 10
+			mpvRunning := false
+			for i := 0; i < maxAttempts; i++ {
+				time.Sleep(300 * time.Millisecond)
+				if player.IsMPVRunning(socketPath) {
+					mpvRunning = true
+					break
+				}
+			}
+			if !mpvRunning {
+				ui.ClearScreen()
+				err := fmt.Errorf("MPV başlatılamadı veya zamanında yanıt vermedi")
+				utils.LogError(Logger, err)
+				return source, SelectedSource, err
+			}
+
+			var stopCh chan struct{}
+			if !DisableRPC {
+				stopCh = make(chan struct{})
+				go utils.UpdateDiscordRPC(socketPath, seasonEpisodeNames, 0, selectedAnimeName, SelectedSource, posterURL, timestamp, Logger, stopCh)
+			}
+
+			var selectedAnimeId string
+			if strings.ToLower(source.Source()) == "animecix" {
+				selectedAnimeId = strconv.Itoa(selectedAnimeID)
+			} else {
+				selectedAnimeId = selectedAnimeSlug
+			}
+
+			// Playlist tracking için goroutine
+			go trackPlaylistProgress(socketPath, strings.ToLower(source.Source()), selectedAnimeName, seasonEpisodeNames, selectedAnimeId, Logger)
+
+			// Oynatma işlemi tamamlanana kadar bekle
+			err = cmd.Wait()
+			if err != nil {
+				err = fmt.Errorf("MPV çalışırken hata: %w", err)
+				utils.LogError(Logger, err)
+				return source, SelectedSource, err
+			}
+
+			if stopCh != nil {
+				close(stopCh)
+			}
+
 		// Movie / Bölüm indir
 		case "Bölüm indir", "Movie indir":
 			ui.ClearScreen()
@@ -656,4 +845,38 @@ func QuickResumeLastAnime(cfx *models.App, timestamp time.Time) error {
 	)
 
 	return err
+}
+
+// trackPlaylistProgress, playlist oynatılırken pozisyonu takip eder ve history'yi günceller
+func trackPlaylistProgress(socketPath, source, animeName string, episodeNames []string, animeId string, Logger *models.LogServ) {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	
+	var lastPosition = -1
+	
+	for range ticker.C {
+		// MPV çalışıyor mu kontrol et
+		if !player.IsMPVRunning(socketPath) {
+			return
+		}
+		
+		// Mevcut playlist pozisyonunu al
+		currentPos, err := player.GetCurrentPlaylistPos(socketPath)
+		if err != nil || currentPos < 0 || currentPos >= len(episodeNames) {
+			continue
+		}
+		
+		// Pozisyon değiştiyse history'yi güncelle ve MPV title'ını güncelle
+		if currentPos != lastPosition {
+			lastPosition = currentPos
+			episodeName := episodeNames[currentPos]
+			
+			// MPV title'ını güncelle
+			newTitle := fmt.Sprintf("%s - %s", animeName, episodeName)
+			player.UpdateMPVTitle(socketPath, newTitle)
+			
+			// History'yi güncelle
+			history.UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId, currentPos, Logger)
+		}
+	}
 }
