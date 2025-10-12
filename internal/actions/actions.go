@@ -849,33 +849,50 @@ func QuickResumeLastAnime(cfx *models.App, timestamp time.Time) error {
 
 // trackPlaylistProgress, playlist oynatılırken pozisyonu takip eder ve history'yi günceller
 func trackPlaylistProgress(socketPath, source, animeName string, episodeNames []string, animeId string, Logger *models.LogServ) {
-	ticker := time.NewTicker(3 * time.Second)
+	// İlk olarak playlist-pos property'sini observe et
+	// Bu sayede MPV her bölüm değişiminde bize bildirim gönderecek
+	_, err := player.MPVSendCommand(socketPath, []interface{}{"observe_property", 1, "playlist-pos"})
+	if err != nil {
+		if Logger != nil {
+			utils.LogError(Logger, fmt.Errorf("playlist-pos observe edilemedi: %w", err))
+		}
+		// Fallback: eski yöntemi kullan
+		trackPlaylistProgressPolling(socketPath, source, animeName, episodeNames, animeId, Logger)
+		return
+	}
+	
+	// Callback fonksiyonu: pozisyon değiştiğinde çağrılacak
+	onPositionChange := func(position int, episodeName string) {
+		// History'yi güncelle
+		history.UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId, position, Logger)
+	}
+	
+	// Event-based tracking (blocking call)
+	player.TrackPlaylistWithEvents(socketPath, animeName, episodeNames, onPositionChange)
+}
+
+// trackPlaylistProgressPolling, polling ile pozisyon takibi yapar (fallback)
+func trackPlaylistProgressPolling(socketPath, source, animeName string, episodeNames []string, animeId string, Logger *models.LogServ) {
+	ticker := time.NewTicker(2 * time.Second) // 1 saniye yerine 2 saniye
 	defer ticker.Stop()
 	
 	var lastPosition = -1
 	
 	for range ticker.C {
-		// MPV çalışıyor mu kontrol et
 		if !player.IsMPVRunning(socketPath) {
 			return
 		}
 		
-		// Mevcut playlist pozisyonunu al
 		currentPos, err := player.GetCurrentPlaylistPos(socketPath)
 		if err != nil || currentPos < 0 || currentPos >= len(episodeNames) {
 			continue
 		}
 		
-		// Pozisyon değiştiyse history'yi güncelle ve MPV title'ını güncelle
 		if currentPos != lastPosition {
-			lastPosition = currentPos
 			episodeName := episodeNames[currentPos]
-			
-			// MPV title'ını güncelle
 			newTitle := fmt.Sprintf("%s - %s", animeName, episodeName)
 			player.UpdateMPVTitle(socketPath, newTitle)
-			
-			// History'yi güncelle
+			lastPosition = currentPos
 			history.UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId, currentPos, Logger)
 		}
 	}

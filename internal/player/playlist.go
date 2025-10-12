@@ -1,14 +1,90 @@
 package player
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/axrona/anitr-cli/internal/ipc"
 )
+
+// createLuaScript, başlık güncellemesi için Lua script oluşturur
+func createLuaScript(params []MPVParams) (string, error) {
+	tempDir := os.TempDir()
+	scriptPath := filepath.Join(tempDir, "anitr-title-updater.lua")
+	
+	// Lua script içeriği
+	script := `-- Anitr-CLI automatic title updater
+local titles = {
+`
+	
+	// Her bölüm için başlık bilgisini ekle
+	for i, param := range params {
+		// Lua string'inde özel karakterleri escape et
+		escapedTitle := param.Title
+		escapedTitle = strings.ReplaceAll(escapedTitle, "\\", "\\\\")
+		escapedTitle = strings.ReplaceAll(escapedTitle, "\"", "\\\"")
+		script += fmt.Sprintf("    [%d] = \"%s\",\n", i, escapedTitle)
+	}
+	
+	script += `}
+
+-- Playlist pozisyonu değiştiğinde başlığı güncelle
+mp.observe_property("playlist-pos", "number", function(name, value)
+    if value ~= nil and titles[value] ~= nil then
+        local title = titles[value]
+        mp.set_property("force-media-title", title)
+        mp.osd_message(title, 3)
+    end
+end)
+
+-- İlk başlık
+if titles[0] ~= nil then
+    mp.set_property("force-media-title", titles[0])
+end
+`
+	
+	// Script dosyasını yaz
+	err := os.WriteFile(scriptPath, []byte(script), 0644)
+	if err != nil {
+		return "", fmt.Errorf("lua script oluşturulamadı: %w", err)
+	}
+	
+	return scriptPath, nil
+}
+
+// createM3U8Playlist, verilen parametrelerle M3U8 playlist dosyası oluşturur
+func createM3U8Playlist(params []MPVParams) (string, error) {
+	// Temp dizininde playlist dosyası oluştur
+	tempDir := os.TempDir()
+	playlistPath := filepath.Join(tempDir, "anitr-playlist.m3u8")
+	
+	// M3U8 dosyası oluştur
+	f, err := os.Create(playlistPath)
+	if err != nil {
+		return "", fmt.Errorf("playlist dosyası oluşturulamadı: %w", err)
+	}
+	defer f.Close()
+	
+	// M3U8 header
+	f.WriteString("#EXTM3U\n")
+	
+	// Her bölüm için entry ekle
+	for _, param := range params {
+		// Başlık bilgisini ekle
+		f.WriteString(fmt.Sprintf("#EXTINF:-1,%s\n", param.Title))
+		// URL
+		f.WriteString(fmt.Sprintf("%s\n", param.Url))
+	}
+	
+	return playlistPath, nil
+}
 
 // PlayWithPlaylist, birden fazla bölümü playlist olarak başlatır.
 func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
@@ -23,15 +99,26 @@ func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
 		return nil, "", errors.New("mpv sisteminizde yüklü değil")
 	}
 
-	// İlk bölümü başlatmak için MPV komutunu oluştur
+	// Lua script oluştur (başlık güncellemeleri için)
+	luaScriptPath, err := createLuaScript(params)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// M3U8 playlist dosyası oluştur
+	playlistPath, err := createM3U8Playlist(params)
+	if err != nil {
+		os.Remove(luaScriptPath)
+		return nil, "", err
+	}
+
+	// MPV komutunu oluştur
 	args := []string{
 		"--fullscreen", // Tam ekran başlat
 		"--save-position-on-quit",
-		fmt.Sprintf("--title=%s", params[0].Title),
-		fmt.Sprintf("--force-media-title=%s", params[0].Title),
-		"--idle=once", "--really-quiet", "--no-terminal",
+		"--idle=once", "--no-terminal",
 		fmt.Sprintf("--input-ipc-server=%s", mpvSocketPath),
-		"--playlist-start=0", // Playlist'i baştan başlat
+		fmt.Sprintf("--script=%s", luaScriptPath), // Lua script'i yükle
 	}
 
 	// Platform bazlı user-agent ve referrer ayarı
@@ -45,17 +132,14 @@ func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
 			"--referrer=https://yeshi.eu.org/")
 	}
 
-	// İlk bölümün altyazısını ekle
-	if params[0].SubtitleUrl != nil && *params[0].SubtitleUrl != "" {
-		args = append(args, fmt.Sprintf("--sub-file=%s", *params[0].SubtitleUrl))
-	}
-
-	// İlk bölümün URL'sini ekle
-	args = append(args, params[0].Url)
+	// Playlist dosyasını ekle
+	args = append(args, fmt.Sprintf("--playlist=%s", playlistPath))
 
 	mpvBinary := getMPVBinary()
 	cmd := exec.Command(mpvBinary, args...)
 	if err := cmd.Start(); err != nil {
+		os.Remove(playlistPath)
+		os.Remove(luaScriptPath)
 		return cmd, "", err
 	}
 
@@ -67,27 +151,17 @@ func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
 		conn, err := ipc.ConnectToPipe(mpvSocketPath)
 		if err == nil {
 			conn.Close()
-			
-			// Kalan bölümleri playlist'e ekle
-			for i := 1; i < len(params); i++ {
-				playlistArgs := []interface{}{"loadfile", params[i].Url, "append-play"}
-				_, err := MPVSendCommand(mpvSocketPath, playlistArgs)
-				if err != nil {
-					// Hata durumunda devam et, sadece logla
-					continue
-				}
-				
-				// Altyazıyı ekle (varsa)
-				if params[i].SubtitleUrl != nil && *params[i].SubtitleUrl != "" {
-					subArgs := []interface{}{"sub-add", *params[i].SubtitleUrl}
-					MPVSendCommand(mpvSocketPath, subArgs)
-				}
-			}
-			
+			// MPV başladı, biraz bekle sonra dosyaları sil
+			time.Sleep(1 * time.Second)
+			os.Remove(playlistPath)
+			os.Remove(luaScriptPath)
 			return cmd, mpvSocketPath, nil
 		}
 	}
 
+	// Başarısız olursa temizlik yap
+	os.Remove(playlistPath)
+	os.Remove(luaScriptPath)
 	return cmd, "", errors.New("MPV socket hazır değil, başlatılamadı")
 }
 
@@ -131,11 +205,94 @@ func GetPlaylistCount(socketPath string) (int, error) {
 
 // UpdateMPVTitle, MPV'nin başlığını günceller
 func UpdateMPVTitle(socketPath, title string) error {
-	// MPV'de title güncellemek için force-media-title property'sini kullan
+	var lastErr error
+	
+	// 1. force-media-title'ı ayarla (pencere başlığı için)
 	_, err := MPVSendCommand(socketPath, []interface{}{"set_property", "force-media-title", title})
 	if err != nil {
-		// Alternatif olarak title property'sini dene
-		_, err = MPVSendCommand(socketPath, []interface{}{"set_property", "title", title})
+		lastErr = err
 	}
-	return err
+	
+	// 2. media-title'ı da ayarlamayı dene (bazı durumlarda bu da gerekebilir)
+	_, err = MPVSendCommand(socketPath, []interface{}{"set_property", "media-title", title})
+	if err != nil && lastErr == nil {
+		lastErr = err
+	}
+	
+	// 3. OSD mesajını göster (görsel feedback)
+	MPVSendCommand(socketPath, []interface{}{"show-text", title, 2000})
+	
+	return lastErr
+}
+
+// PlaylistChangeCallback, playlist pozisyonu değiştiğinde çağrılacak fonksiyon tipi
+type PlaylistChangeCallback func(position int, episodeName string)
+
+// TrackPlaylistWithEvents, MPV event'lerini dinleyerek playlist takibi yapar
+func TrackPlaylistWithEvents(socketPath, animeName string, episodeNames []string, onPositionChange PlaylistChangeCallback) {
+	conn, err := ipc.ConnectToPipe(socketPath)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	
+	// İlk bölümün başlığını ayarla
+	if len(episodeNames) > 0 {
+		initialTitle := fmt.Sprintf("%s - %s", animeName, episodeNames[0])
+		UpdateMPVTitle(socketPath, initialTitle)
+		// İlk pozisyon callback'ini çağır
+		if onPositionChange != nil {
+			go onPositionChange(0, episodeNames[0])
+		}
+	}
+	
+	var lastPosition = -1
+	
+	// Event loop - MPV'den gelen mesajları dinle
+	for {
+		buf := make([]byte, 4096)
+		n, err := conn.Read(buf)
+		if err != nil {
+			// Bağlantı koptu, MPV kapanmış olabilir
+			return
+		}
+		
+		if n == 0 {
+			continue
+		}
+		
+		// JSON yanıtını parse et
+		var response map[string]interface{}
+		if err := json.Unmarshal(buf[:n], &response); err != nil {
+			continue
+		}
+		
+		// Event kontrolü
+		if event, ok := response["event"].(string); ok {
+			// playlist-pos değişimi event'i
+			if event == "property-change" {
+				if name, ok := response["name"].(string); ok && name == "playlist-pos" {
+					if data, ok := response["data"].(float64); ok {
+						currentPos := int(data)
+						
+						// Pozisyon değiştiyse ve geçerliyse
+						if currentPos != lastPosition && currentPos >= 0 && currentPos < len(episodeNames) {
+							episodeName := episodeNames[currentPos]
+							newTitle := fmt.Sprintf("%s - %s", animeName, episodeName)
+							
+							// Yeni bağlantı açıp başlığı güncelle (mevcut conn read modunda)
+							go UpdateMPVTitle(socketPath, newTitle)
+							
+							// Callback'i çağır (history update vs.)
+							if onPositionChange != nil {
+								go onPositionChange(currentPos, episodeName)
+							}
+							
+							lastPosition = currentPos
+						}
+					}
+				}
+			}
+		}
+	}
 }
