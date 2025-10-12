@@ -23,6 +23,7 @@
 - **Cross-Platform**: Linux, Windows ve macOS üzerinde çalışabilir.
 - **AnimeCix ve OpenAnime Entegrasyonu**: Popüler anime platformlarından hızlı arama ve izleme.
 - **Fansub Seçimi**: OpenAnime üzerinden izlerken istediğin çeviri grubunu seçebilirsin.
+- **Sezon Playlist**: Tüm sezonu otomatik sırayla izlemenizi sağlar, her bölüm arası menüye dönmenize gerek yok!
 - **İzleme Geçmişi**: İzlediğin animeler kaydedilir, kaldığın bölümden devam edebilirsin.
 - **Arayüz Esnekliği**: Terminal tabanlı TUI ya da minimalist Rofi arayüzünden dilediğini kullan.
 - **İndirme Özelliği**: Animeleri indirip internet olmadan da izleme özgürlüğü.
@@ -40,7 +41,9 @@
 ```bash
 yay -S anitr-cli
 ```
+
 ya da
+
 ```bash
 paru -S anitr-cli
 ```
@@ -50,10 +53,12 @@ paru -S anitr-cli
 ```bash
 curl -sS https://raw.githubusercontent.com/axrona/anitr-cli/main/install.sh | bash
 ```
+
 ya da
+
 ```bash
 git clone https://github.com/axrona/anitr-cli.git
-cd anitr-cli  
+cd anitr-cli
 git fetch --tags
 make install-linux
 ```
@@ -64,7 +69,8 @@ make install-linux
 > İsteğe bağlı: `rofi` (Rofi arayüzü için), `youtube-dl`/`yt-dlp` (Bölüm indirme özelliği için)
 
 **Paketleri yüklemek için:**
-> [!WARNING]   
+
+> [!WARNING]  
 > Debian repolarında Go sürümü 1.23'den eski olabilir. Bu yüzden snap ile (`sudo snap install go --classic`) ya da manuel kurulum gerekebilir.
 
 - **Debian/Ubuntu:**
@@ -72,8 +78,6 @@ make install-linux
   sudo apt update
   sudo apt install golang git make mpv rofi yt-dlp
   ```
-
-  
 - **Arch/Manjaro:**
   ```bash
   sudo pacman -S go git make mpv rofi yt-dlp
@@ -104,10 +108,11 @@ Artık **cmd** veya **PowerShell** içinde anitr-cli çalıştırabilirsiniz.
 ### 💻 MacOS
 
 > [!WARNING]
-> Mac cihazım olmadığından dolayı **anitr-cli** MacOS üzerinde test edilmedi. 
+> Mac cihazım olmadığından dolayı **anitr-cli** MacOS üzerinde test edilmedi.
 > Ancak, Linux'ta kullanılan yöntemlerle kurulup çalışması oldukça muhtemeldir. Herhangi bir sorunla karşılaşırsanız lütfen [**issue**](https://github.com/axrona/anitr-cli/issues) açınız.
 
 **Kurulum (Manuel)**:
+
 ```bash
 git clone https://github.com/axrona/anitr-cli.git
 cd anitr-cli
@@ -121,7 +126,7 @@ Anime indirebilmek için [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/late
 brew install yt-dlp
 ```
 
-ya da 
+ya da
 
 ```bash
 brew install youtube-dl
@@ -134,19 +139,21 @@ brew install youtube-dl
 ```bash
 anitr-cli [alt komut] [bayraklar]
 ```
+
 ```
-Bayraklar:   
-  --disable-rpc       Discord Rich Presence desteğini devre dışı bırakır.  
-  --go                Son izlenen anime bölümünü açar.   
-  --version, -v       Sürüm bilgisini gösterir   
-  --help, -h          Yardım menüsünü gösterir   
-  --rofi              [Kullanımdan kaldırıldı] Yerine rofi alt komutunu kullanın (Sadece Linux)  
+Bayraklar:
+  --disable-rpc       Discord Rich Presence desteğini devre dışı bırakır.
+  --go                Son izlenen anime bölümünü açar.
+  --version, -v       Sürüm bilgisini gösterir
+  --help, -h          Yardım menüsünü gösterir
+  --rofi              [Kullanımdan kaldırıldı] Yerine rofi alt komutunu kullanın (Sadece Linux)
 
 Alt komutlar: (Sadece Linux)
-  rofi                  Rofi arayüzü ile başlatır   
-     -f, --rofi-flags      Rofi’ye özel parametreler (örn: --rofi-flags="-theme mytheme")   
-  tui                   Terminal arayüzü ile başlatır   
+  rofi                  Rofi arayüzü ile başlatır
+     -f, --rofi-flags      Rofi’ye özel parametreler (örn: --rofi-flags="-theme mytheme")
+  tui                   Terminal arayüzü ile başlatır
 ```
+
 ---
 
 ## 💡 Sorunlar & Katkı
