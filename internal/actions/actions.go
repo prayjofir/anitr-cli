@@ -524,8 +524,28 @@ func PlayAnimeLoop(
 			// Loading spinner durdur
 			close(done)
 
-			// MPV ile playlist'i başlat
-			cmd, socketPath, err := player.PlayWithPlaylist(playlistParams)
+			// History'den başlangıç pozisyonunu al
+			startIndex := 0
+			var selectedAnimeId string
+			if strings.ToLower(source.Source()) == "animecix" {
+				selectedAnimeId = strconv.Itoa(selectedAnimeID)
+			} else {
+				selectedAnimeId = selectedAnimeSlug
+			}
+			
+			// History'den son izlenen bölümü kontrol et
+			if lastEpisodeIdx >= 0 {
+				// Son izlenen bölüm bu sezonun içinde mi?
+				for i, globalIdx := range seasonEpisodeIndices {
+					if globalIdx == lastEpisodeIdx {
+						startIndex = i
+						break
+					}
+				}
+			}
+
+			// MPV ile playlist'i başlat (startIndex ile)
+			cmd, socketPath, err := player.PlayWithPlaylist(playlistParams, startIndex)
 			if !utils.CheckErr(internal.UiParams{
 				Mode:      UiMode,
 				RofiFlags: &RofiFlags,
@@ -550,21 +570,43 @@ func PlayAnimeLoop(
 				return source, SelectedSource, err
 			}
 
+			// İlk history kaydını hemen yap (MPV başladıktan sonra)
+			initialGlobalIndex := startIndex
+			if startIndex >= 0 && startIndex < len(seasonEpisodeIndices) {
+				initialGlobalIndex = seasonEpisodeIndices[startIndex]
+			}
+			initialEpisodeName := seasonEpisodeNames[startIndex]
+			
+			// İlk bölüm için history'yi güncelle
+			hist, err := history.ReadAnimeHistory()
+			if err == nil {
+				sourceEntry, ok := hist[strings.ToLower(source.Source())]
+				if !ok {
+					sourceEntry = make(map[string]models.AnimeHistoryEntry)
+				}
+				
+				now := time.Now()
+				sourceEntry[selectedAnimeName] = models.AnimeHistoryEntry{
+					LastEpisodeIdx:  &initialGlobalIndex,
+					LastEpisodeName: initialEpisodeName,
+					AnimeId:         &selectedAnimeId,
+					LastWatched:     &now,
+				}
+				hist[strings.ToLower(source.Source())] = sourceEntry
+				
+				if err := history.WriteAnimeHistory(hist); err != nil {
+					utils.LogError(Logger, err)
+				}
+			}
+
 			var stopCh chan struct{}
 			if !DisableRPC {
 				stopCh = make(chan struct{})
-				go utils.UpdateDiscordRPC(socketPath, seasonEpisodeNames, 0, selectedAnimeName, SelectedSource, posterURL, timestamp, Logger, stopCh)
+				go utils.UpdateDiscordRPC(socketPath, seasonEpisodeNames, startIndex, selectedAnimeName, SelectedSource, posterURL, timestamp, Logger, stopCh)
 			}
 
-			var selectedAnimeId string
-			if strings.ToLower(source.Source()) == "animecix" {
-				selectedAnimeId = strconv.Itoa(selectedAnimeID)
-			} else {
-				selectedAnimeId = selectedAnimeSlug
-			}
-
-			// Playlist tracking için goroutine
-			go trackPlaylistProgress(socketPath, strings.ToLower(source.Source()), selectedAnimeName, seasonEpisodeNames, selectedAnimeId, Logger)
+			// Playlist tracking için goroutine (startIndex ile, genel indexleri de geç)
+			go trackPlaylistProgress(socketPath, strings.ToLower(source.Source()), selectedAnimeName, seasonEpisodeNames, selectedAnimeId, startIndex, seasonEpisodeIndices, Logger)
 
 			// Oynatma işlemi tamamlanana kadar bekle
 			err = cmd.Wait()
@@ -576,6 +618,20 @@ func PlayAnimeLoop(
 
 			if stopCh != nil {
 				close(stopCh)
+			}
+			
+			// MPV kapandıktan sonra son pozisyonu kontrol et ve menüdeki selectedEpisodeIndex'i güncelle
+			time.Sleep(500 * time.Millisecond) // History yazılması için kısa bir bekleme
+			updatedHist, err := history.ReadAnimeHistory()
+			if err == nil {
+				if sourceEntry, ok := updatedHist[strings.ToLower(source.Source())]; ok {
+					if animeEntry, ok := sourceEntry[selectedAnimeName]; ok {
+						if animeEntry.LastEpisodeIdx != nil {
+							// Son izlenen bölümü menü için kaydet
+							selectedEpisodeIndex = *animeEntry.LastEpisodeIdx
+						}
+					}
+				}
 			}
 
 		// Movie / Bölüm indir
@@ -772,7 +828,6 @@ func QuickResumeLastAnime(cfx *models.App, timestamp time.Time) error {
 	// En son izlenen animeyi bul
 	var latestAnime string
 	var latestAnimeId string
-	var latestEpisodeIdx int
 	var latestSource string
 	var latestTime time.Time
 
@@ -782,7 +837,6 @@ func QuickResumeLastAnime(cfx *models.App, timestamp time.Time) error {
 				latestTime = *entry.LastWatched
 				latestAnime = animeName
 				latestAnimeId = *entry.AnimeId
-				latestEpisodeIdx = *entry.LastEpisodeIdx
 				latestSource = sourceName
 			}
 		}
@@ -831,11 +885,6 @@ func QuickResumeLastAnime(cfx *models.App, timestamp time.Time) error {
 		return fmt.Errorf("bölümler alınamadı: %w", err)
 	}
 
-	// Son bölümden devam et
-	if latestEpisodeIdx >= len(episodes) {
-		latestEpisodeIdx = len(episodes) - 1
-	}
-
 	// Oynatma döngüsüne gir
 	_, _, err = PlayAnimeLoop(
 		source, *cfx.SelectedSource, episodes, episodeNames,
@@ -848,35 +897,55 @@ func QuickResumeLastAnime(cfx *models.App, timestamp time.Time) error {
 }
 
 // trackPlaylistProgress, playlist oynatılırken pozisyonu takip eder ve history'yi günceller
-func trackPlaylistProgress(socketPath, source, animeName string, episodeNames []string, animeId string, Logger *models.LogServ) {
-	// İlk olarak playlist-pos property'sini observe et
-	// Bu sayede MPV her bölüm değişiminde bize bildirim gönderecek
-	_, err := player.MPVSendCommand(socketPath, []interface{}{"observe_property", 1, "playlist-pos"})
-	if err != nil {
-		if Logger != nil {
-			utils.LogError(Logger, fmt.Errorf("playlist-pos observe edilemedi: %w", err))
-		}
-		// Fallback: eski yöntemi kullan
-		trackPlaylistProgressPolling(socketPath, source, animeName, episodeNames, animeId, Logger)
-		return
-	}
-	
+func trackPlaylistProgress(socketPath, source, animeName string, episodeNames []string, animeId string, startIndex int, globalIndices []int, Logger *models.LogServ) {
 	// Callback fonksiyonu: pozisyon değiştiğinde çağrılacak
 	onPositionChange := func(position int, episodeName string) {
-		// History'yi güncelle
-		history.UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId, position, Logger)
+		// position playlist içindeki pozisyon, bunu genel episode index'e çevir
+		globalEpisodeIndex := position
+		if position >= 0 && position < len(globalIndices) {
+			globalEpisodeIndex = globalIndices[position]
+		}
+		
+		// Playlist modunda direkt olarak history'yi güncelle (süre kontrolü yapmadan)
+		hist, err := history.ReadAnimeHistory()
+		if err != nil {
+			if Logger != nil {
+				utils.LogError(Logger, err)
+			}
+			return
+		}
+		
+		sourceEntry, ok := hist[source]
+		if !ok {
+			sourceEntry = make(map[string]models.AnimeHistoryEntry)
+		}
+		
+		now := time.Now()
+		sourceEntry[animeName] = models.AnimeHistoryEntry{
+			LastEpisodeIdx:  &globalEpisodeIndex,
+			LastEpisodeName: episodeName,
+			AnimeId:         &animeId,
+			LastWatched:     &now,
+		}
+		hist[source] = sourceEntry
+		
+		if err := history.WriteAnimeHistory(hist); err != nil {
+			if Logger != nil {
+				utils.LogError(Logger, err)
+			}
+		}
 	}
 	
 	// Event-based tracking (blocking call)
-	player.TrackPlaylistWithEvents(socketPath, animeName, episodeNames, onPositionChange)
+	player.TrackPlaylistWithEvents(socketPath, animeName, episodeNames, startIndex, onPositionChange)
 }
 
 // trackPlaylistProgressPolling, polling ile pozisyon takibi yapar (fallback)
-func trackPlaylistProgressPolling(socketPath, source, animeName string, episodeNames []string, animeId string, Logger *models.LogServ) {
+func trackPlaylistProgressPolling(socketPath, source, animeName string, episodeNames []string, animeId string, startIndex int, globalIndices []int, Logger *models.LogServ) {
 	ticker := time.NewTicker(2 * time.Second) // 1 saniye yerine 2 saniye
 	defer ticker.Stop()
 	
-	var lastPosition = -1
+	var lastPosition = startIndex // İlk pozisyon (ilk history zaten actions.go'da yazıldı)
 	
 	for range ticker.C {
 		if !player.IsMPVRunning(socketPath) {
@@ -893,7 +962,41 @@ func trackPlaylistProgressPolling(socketPath, source, animeName string, episodeN
 			newTitle := fmt.Sprintf("%s - %s", animeName, episodeName)
 			player.UpdateMPVTitle(socketPath, newTitle)
 			lastPosition = currentPos
-			history.UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId, currentPos, Logger)
+			
+			// Genel episode index'e çevir
+			globalEpisodeIndex := currentPos
+			if currentPos >= 0 && currentPos < len(globalIndices) {
+				globalEpisodeIndex = globalIndices[currentPos]
+			}
+			
+			// Playlist modunda direkt olarak history'yi güncelle (süre kontrolü yapmadan)
+			hist, err := history.ReadAnimeHistory()
+			if err != nil {
+				if Logger != nil {
+					utils.LogError(Logger, err)
+				}
+				continue
+			}
+			
+			sourceEntry, ok := hist[source]
+			if !ok {
+				sourceEntry = make(map[string]models.AnimeHistoryEntry)
+			}
+			
+			now := time.Now()
+			sourceEntry[animeName] = models.AnimeHistoryEntry{
+				LastEpisodeIdx:  &globalEpisodeIndex,
+				LastEpisodeName: episodeName,
+				AnimeId:         &animeId,
+				LastWatched:     &now,
+			}
+			hist[source] = sourceEntry
+			
+			if err := history.WriteAnimeHistory(hist); err != nil {
+				if Logger != nil {
+					utils.LogError(Logger, err)
+				}
+			}
 		}
 	}
 }

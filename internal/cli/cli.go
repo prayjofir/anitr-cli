@@ -302,6 +302,7 @@ func settingsMenu(cfx *models.App) {
 			"İndirme dizinini değiştir : " + cfg.DownloadDir,
 			"Varsayılan kaynağı değiştir : " + SelectedSourceText,
 			"Geçmiş limitini değiştir : " + fmt.Sprintf("%d", cfg.HistoryLimit),
+			"Geçmiş dosyasını aç",
 			"RPC'yi devre dışı bırak : " + DisableRPCText,
 			"Geri",
 		}
@@ -364,7 +365,19 @@ func settingsMenu(cfx *models.App) {
 				changesMade = true
 			}
 
-		case menuOptions[3]: // RPC'yi devre dışı bırak
+		case menuOptions[3]: // Geçmiş dosyasını aç
+			path, perr := history.GetHistoryPath()
+			if perr != nil {
+				utils.LogError(cfx.Logger, perr)
+				fmt.Println("Geçmiş yolu alınamadı")
+				break
+			}
+			if err := utils.OpenPath(path); err != nil {
+				utils.LogError(cfx.Logger, err)
+				fmt.Println("Geçmiş dosyası açılamadı")
+			}
+
+		case menuOptions[4]: // RPC'yi devre dışı bırak
 			choice, err := utils.ShowSelection(
 				models.App{UiMode: cfx.UiMode, RofiFlags: cfx.RofiFlags},
 				[]string{"Evet", "Hayır"},
@@ -384,8 +397,8 @@ func settingsMenu(cfx *models.App) {
 				cfg.DisableRPC = helpers.Ptr(false)
 			}
 			changesMade = true
-
-		case menuOptions[4]: // Geri
+			
+		case menuOptions[5]: // Geri
 			return
 		}
 

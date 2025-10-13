@@ -15,9 +15,17 @@ import (
 )
 
 // createLuaScript, başlık güncellemesi için Lua script oluşturur
-func createLuaScript(params []MPVParams) (string, error) {
+func createLuaScript(params []MPVParams, startIndex int) (string, error) {
 	tempDir := os.TempDir()
 	scriptPath := filepath.Join(tempDir, "anitr-title-updater.lua")
+	
+	// startIndex'i sınırla
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= len(params) {
+		startIndex = len(params) - 1
+	}
 	
 	// Lua script içeriği
 	script := `-- Anitr-CLI automatic title updater
@@ -33,9 +41,10 @@ local titles = {
 		script += fmt.Sprintf("    [%d] = \"%s\",\n", i, escapedTitle)
 	}
 	
-	script += `}
-
--- Playlist pozisyonu değiştiğinde başlığı güncelle
+	// Başlangıç pozisyonunu ekle
+	script += fmt.Sprintf("}\nlocal start_index = %d\n\n", startIndex)
+	
+	script += `-- Playlist pozisyonu değiştiğinde başlığı güncelle
 mp.observe_property("playlist-pos", "number", function(name, value)
     if value ~= nil and titles[value] ~= nil then
         local title = titles[value]
@@ -44,9 +53,9 @@ mp.observe_property("playlist-pos", "number", function(name, value)
     end
 end)
 
--- İlk başlık
-if titles[0] ~= nil then
-    mp.set_property("force-media-title", titles[0])
+-- İlk başlık (start_index'ten başla)
+if titles[start_index] ~= nil then
+    mp.set_property("force-media-title", titles[start_index])
 end
 `
 	
@@ -87,9 +96,17 @@ func createM3U8Playlist(params []MPVParams) (string, error) {
 }
 
 // PlayWithPlaylist, birden fazla bölümü playlist olarak başlatır.
-func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
+func PlayWithPlaylist(params []MPVParams, startIndex int) (*exec.Cmd, string, error) {
 	if len(params) == 0 {
 		return nil, "", errors.New("playlist boş olamaz")
+	}
+
+	// startIndex'i kontrol et ve sınırla
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= len(params) {
+		startIndex = len(params) - 1
 	}
 
 	mpvSocketPath := getMPVSocketPath()
@@ -99,8 +116,8 @@ func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
 		return nil, "", errors.New("mpv sisteminizde yüklü değil")
 	}
 
-	// Lua script oluştur (başlık güncellemeleri için)
-	luaScriptPath, err := createLuaScript(params)
+	// Lua script oluştur (başlık güncellemeleri için, startIndex ile)
+	luaScriptPath, err := createLuaScript(params, startIndex)
 	if err != nil {
 		return nil, "", err
 	}
@@ -119,6 +136,7 @@ func PlayWithPlaylist(params []MPVParams) (*exec.Cmd, string, error) {
 		"--idle=once", "--no-terminal",
 		fmt.Sprintf("--input-ipc-server=%s", mpvSocketPath),
 		fmt.Sprintf("--script=%s", luaScriptPath), // Lua script'i yükle
+		fmt.Sprintf("--playlist-start=%d", startIndex), // Başlangıç pozisyonu
 	}
 
 	// Platform bazlı user-agent ve referrer ayarı
@@ -229,24 +247,31 @@ func UpdateMPVTitle(socketPath, title string) error {
 type PlaylistChangeCallback func(position int, episodeName string)
 
 // TrackPlaylistWithEvents, MPV event'lerini dinleyerek playlist takibi yapar
-func TrackPlaylistWithEvents(socketPath, animeName string, episodeNames []string, onPositionChange PlaylistChangeCallback) {
+func TrackPlaylistWithEvents(socketPath, animeName string, episodeNames []string, startIndex int, onPositionChange PlaylistChangeCallback) {
 	conn, err := ipc.ConnectToPipe(socketPath)
 	if err != nil {
 		return
 	}
 	defer conn.Close()
 	
-	// İlk bölümün başlığını ayarla
-	if len(episodeNames) > 0 {
-		initialTitle := fmt.Sprintf("%s - %s", animeName, episodeNames[0])
-		UpdateMPVTitle(socketPath, initialTitle)
-		// İlk pozisyon callback'ini çağır
-		if onPositionChange != nil {
-			go onPositionChange(0, episodeNames[0])
-		}
+	// Başlangıç pozisyonunu kontrol et
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= len(episodeNames) {
+		startIndex = len(episodeNames) - 1
 	}
 	
-	var lastPosition = -1
+	// playlist-pos property'sini observe et (BU BAĞLANTIDA!)
+	observeCmd := map[string]interface{}{
+		"command": []interface{}{"observe_property", 1, "playlist-pos"},
+	}
+	observeJSON, _ := json.Marshal(observeCmd)
+	observeJSON = append(observeJSON, '\n')
+	conn.Write(observeJSON)
+	
+	// lastPosition'ı startIndex olarak başlat (ilk callback zaten actions.go'da çağrıldı)
+	var lastPosition = startIndex
 	
 	// Event loop - MPV'den gelen mesajları dinle
 	for {

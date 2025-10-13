@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -75,6 +76,32 @@ func ConfigDir() string {
 		}
 		return filepath.Join(home, ".anitr-cli")
 	}
+}
+
+// OpenPath, verilen dosya veya dizini OS'in varsayılan uygulamasıyla açar
+func OpenPath(path string) error {
+    if path == "" {
+        return fmt.Errorf("boş yol açılamaz")
+    }
+    // Yol mevcut mu kontrol et (dosya veya dizin)
+    if _, err := os.Stat(path); err != nil {
+        return fmt.Errorf("yol mevcut değil: %w", err)
+    }
+
+    switch runtime.GOOS {
+    case "windows":
+        // Powershell/Windows'ta 'rundll32 url.dll,FileProtocolHandler <path>' veya 'start' kullanılabilir.
+        // exec.Command ile doğrudan 'rundll32' güvenilir çalışır.
+        cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+        return cmd.Start()
+    case "darwin":
+        cmd := exec.Command("open", path)
+        return cmd.Start()
+    default:
+        // linux
+        cmd := exec.Command("xdg-open", path)
+        return cmd.Start()
+    }
 }
 
 // NewLogger, işletim sistemine göre uygun dizinde bir log dosyası oluşturur ve Logger döner.
