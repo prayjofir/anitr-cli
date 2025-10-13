@@ -22,6 +22,10 @@ import (
 var (
 	ErrQuit   = errors.New("quit requested")
 	ErrGoBack = errors.New("go back requested")
+	
+	// Global spinner state
+	currentSpinnerLabel string
+	spinnerActive       bool
 )
 
 // Stil ve renkler
@@ -68,18 +72,30 @@ func ShowSpinner(label string, done chan struct{}) {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#e45cc0"))
 
+	// Global state'i güncelle
+	currentSpinnerLabel = label
+	spinnerActive = true
+
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-done:
-			fmt.Printf("\r✔ %s\n", label)
+			fmt.Printf("\r✔ %s\n", currentSpinnerLabel)
+			spinnerActive = false
 			return
 		case <-ticker.C:
 			s, _ = s.Update(spinner.TickMsg{})
-			fmt.Printf("\r%s %s", s.View(), label)
+			fmt.Printf("\r%s %s", s.View(), currentSpinnerLabel)
 		}
+	}
+}
+
+// UpdateSpinnerMessage, aktif spinner'ın mesajını günceller
+func UpdateSpinnerMessage(newLabel string) {
+	if spinnerActive {
+		currentSpinnerLabel = newLabel
 	}
 }
 

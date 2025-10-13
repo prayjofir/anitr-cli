@@ -25,6 +25,12 @@ func getHistoryPath() (string, error) {
 	return filepath.Join(historyDir, "history.json"), nil
 }
 
+// GetHistoryPath history.json dosyasının tam yolunu döner
+// Klasör mevcut değilse oluşturur.
+func GetHistoryPath() (string, error) {
+    return getHistoryPath()
+}
+
 // ReadAnimeHistory history.json'u okur, yoksa yeni oluşturur
 func ReadAnimeHistory() (models.AnimeHistory, error) {
 	path, err := getHistoryPath()

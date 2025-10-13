@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -75,6 +76,32 @@ func ConfigDir() string {
 		}
 		return filepath.Join(home, ".anitr-cli")
 	}
+}
+
+// OpenPath, verilen dosya veya dizini OS'in varsayılan uygulamasıyla açar
+func OpenPath(path string) error {
+    if path == "" {
+        return fmt.Errorf("boş yol açılamaz")
+    }
+    // Yol mevcut mu kontrol et (dosya veya dizin)
+    if _, err := os.Stat(path); err != nil {
+        return fmt.Errorf("yol mevcut değil: %w", err)
+    }
+
+    switch runtime.GOOS {
+    case "windows":
+        // Powershell/Windows'ta 'rundll32 url.dll,FileProtocolHandler <path>' veya 'start' kullanılabilir.
+        // exec.Command ile doğrudan 'rundll32' güvenilir çalışır.
+        cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+        return cmd.Start()
+    case "darwin":
+        cmd := exec.Command("open", path)
+        return cmd.Start()
+    default:
+        // linux
+        cmd := exec.Command("xdg-open", path)
+        return cmd.Start()
+    }
 }
 
 // NewLogger, işletim sistemine göre uygun dizinde bir log dosyası oluşturur ve Logger döner.
@@ -497,6 +524,103 @@ func ShowSelection(cfx models.App, list []string, label string) (string, error) 
 	})
 }
 
+// GetSeasonPlaylistData, seçili sezonun tüm bölümleri için URL'leri ve altyazıları toplar
+func GetSeasonPlaylistData(
+	source string,
+	episodes []models.Episode,
+	selectedFansubIdx int,
+	isMovie bool,
+	slug *string,
+	selectedResolution string,
+	selectedAnimeID int,
+	episodeNames []string,
+	selectedAnimeName string,
+	Logger *models.LogServ,
+	progressCallback func(current, total int, episodeName string), // Progress callback
+) ([]player.MPVParams, error) {
+	var playlistParams []player.MPVParams
+	var failedEpisodes []string
+
+	for i, ep := range episodes {
+		// Progress callback çağır
+		if progressCallback != nil {
+			progressCallback(i+1, len(episodes), ep.Title)
+		}
+
+		// Progress gösterimi için
+		if Logger != nil {
+			LogMsg(Logger, "Playlist hazırlanıyor: %d/%d - %s", i+1, len(episodes), ep.Title)
+		}
+
+		// Tek bölüm için veri al
+		data, _, err := UpdateWatchAPI(
+			source,
+			[]models.Episode{ep}, // tek bölüm
+			0,                    // index 0 çünkü slice sadece 1 eleman
+			selectedAnimeID,
+			0, // sezon index kullanılacaksa güncellenebilir
+			selectedFansubIdx,
+			isMovie,
+			slug,
+		)
+		if err != nil {
+			failedEpisodes = append(failedEpisodes, ep.Title)
+			continue
+		}
+
+		labelsIface, ok := data["labels"].([]string)
+		urlsIface, ok2 := data["urls"].([]string)
+		captionURLIface, ok3 := data["caption_url"].(string)
+		if !ok || !ok2 {
+			failedEpisodes = append(failedEpisodes, ep.Title)
+			continue
+		}
+		labels := labelsIface
+		urls := urlsIface
+		captionURL := captionURLIface
+
+		// Seçilen çözünürlük için index bul
+		resolutionIdx := 0
+		for j, label := range labels {
+			if label == selectedResolution {
+				resolutionIdx = j
+				break
+			}
+		}
+		if resolutionIdx >= len(urls) {
+			resolutionIdx = len(urls) - 1
+		}
+
+		// MPV parametrelerini hazırla
+		mpvTitle := fmt.Sprintf("%s - %s", selectedAnimeName, ep.Title)
+		if isMovie {
+			mpvTitle = selectedAnimeName
+		}
+
+		var subtitleUrl *string
+		if ok3 && captionURL != "" {
+			subtitleUrl = &captionURL
+		}
+
+		playlistParams = append(playlistParams, player.MPVParams{
+			Url:         urls[resolutionIdx],
+			SubtitleUrl: subtitleUrl,
+			Title:       mpvTitle,
+		})
+	}
+
+	// Başarısız bölümleri logla
+	if len(failedEpisodes) > 0 && Logger != nil {
+		LogMsg(Logger, "Playlist hazırlanırken %d bölüm başarısız oldu: %v", len(failedEpisodes), failedEpisodes)
+	}
+
+	if len(playlistParams) == 0 {
+		return nil, fmt.Errorf("hiçbir bölüm için URL alınamadı")
+	}
+
+	return playlistParams, nil
+}
+
 // Discord RPC'yi güncelleyerek anime oynatma durumunu Discord'a yansıtır
 func UpdateDiscordRPC(socketPath string, episodeNames []string, selectedEpisodeIndex int,
 	selectedAnimeName, SelectedSource, posterURL string, timestamp time.Time, Logger *models.LogServ, stopCh <-chan struct{},
@@ -515,6 +639,27 @@ func UpdateDiscordRPC(socketPath string, episodeNames []string, selectedEpisodeI
 			if !player.IsMPVRunning(socketPath) {
 				rpc.ClientLogout()
 				return
+			}
+
+			// Playlist modunda çalışıyor mu kontrol et
+			playlistCount, err := player.GetPlaylistCount(socketPath)
+			isPlaylistMode := err == nil && playlistCount > 1
+
+			var currentEpisodeIndex int
+			var currentEpisodeName string
+
+			if isPlaylistMode {
+				// Playlist modunda mevcut pozisyonu al
+				currentPos, err := player.GetCurrentPlaylistPos(socketPath)
+				if err != nil || currentPos < 0 || currentPos >= len(episodeNames) {
+					continue
+				}
+				currentEpisodeIndex = currentPos
+				currentEpisodeName = episodeNames[currentPos]
+			} else {
+				// Normal modda seçili bölümü kullan
+				currentEpisodeIndex = selectedEpisodeIndex
+				currentEpisodeName = episodeNames[selectedEpisodeIndex]
 			}
 
 			// MPV duraklatma durumu
@@ -541,7 +686,22 @@ func UpdateDiscordRPC(socketPath string, episodeNames []string, selectedEpisodeI
 				return fmt.Sprintf("%02d:%02d", minutes, secs)
 			}
 
-			state := fmt.Sprintf("%s (%s / %s)", episodeNames[selectedEpisodeIndex], formatTime(timePos), formatTime(duration))
+			// State'i oluştur
+			var state string
+			if isPlaylistMode {
+				state = fmt.Sprintf("%s (%d/%d) (%s / %s)", 
+					currentEpisodeName, 
+					currentEpisodeIndex+1, 
+					playlistCount, 
+					formatTime(timePos), 
+					formatTime(duration))
+			} else {
+				state = fmt.Sprintf("%s (%s / %s)", 
+					currentEpisodeName, 
+					formatTime(timePos), 
+					formatTime(duration))
+			}
+			
 			if isPaused {
 				state += " (Paused)"
 			}
