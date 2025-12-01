@@ -18,6 +18,9 @@
 
 ---
 
+> [!IMPORTANT]
+> Bu projeyi geliştirmeyi bıraktım. Go öğrenirken deneme amaçlı geliştirmiştim ve kod tabanı çok kötü yazılmıştı. Ayrıca OpenAnime API erişimi kapatıldığından OpenAnime üzerinden anime izleyemiyorsunuz. AnimeciX tarafı halen kullanılabilir, ancak projeyi ilerletmeyi düşünmüyorum. Dileyenler çatallayıp devam ettirebilir.
+
 ## 🎬 Özellikler
 
 - **Cross-Platform**: Linux, Windows ve macOS üzerinde çalışabilir.
