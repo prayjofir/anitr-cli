@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal"
-	"github.com/axrona/anitr-cli/internal/config"
-	"github.com/axrona/anitr-cli/internal/helpers"
-	"github.com/axrona/anitr-cli/internal/models"
-	"github.com/axrona/anitr-cli/internal/sources/anizium"
+	"github.com/prayjofir/anitr-cli/internal"
+	"github.com/prayjofir/anitr-cli/internal/config"
+	"github.com/prayjofir/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/models"
+	"github.com/prayjofir/anitr-cli/internal/sources/anizium"
 )
 
 // AniziumFree — hesap gerektirmeyen Anizium kaynağı.

@@ -3,7 +3,7 @@ package flags
 import (
 	"runtime"
 
-	"github.com/axrona/anitr-cli/internal/update"
+	"github.com/prayjofir/anitr-cli/internal/update"
 	"github.com/spf13/cobra"
 )
 

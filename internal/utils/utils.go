@@ -13,17 +13,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal"
-	"github.com/axrona/anitr-cli/internal/helpers"
-	"github.com/axrona/anitr-cli/internal/models"
-	"github.com/axrona/anitr-cli/internal/player"
-	"github.com/axrona/anitr-cli/internal/rpc"
-	"github.com/axrona/anitr-cli/internal/sources/animecix"
-	"github.com/axrona/anitr-cli/internal/sources/anizium"
-	"github.com/axrona/anitr-cli/internal/sources/aniziumfree"
-	"github.com/axrona/anitr-cli/internal/sources/openanime"
-	"github.com/axrona/anitr-cli/internal/ui"
-	"github.com/axrona/anitr-cli/internal/ui/tui"
+	"github.com/prayjofir/anitr-cli/internal"
+	"github.com/prayjofir/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/models"
+	"github.com/prayjofir/anitr-cli/internal/player"
+	"github.com/prayjofir/anitr-cli/internal/rpc"
+	"github.com/prayjofir/anitr-cli/internal/sources/animecix"
+	"github.com/prayjofir/anitr-cli/internal/sources/anizium"
+	"github.com/prayjofir/anitr-cli/internal/sources/aniziumfree"
+	"github.com/prayjofir/anitr-cli/internal/sources/openanime"
+	"github.com/prayjofir/anitr-cli/internal/ui"
+	"github.com/prayjofir/anitr-cli/internal/ui/tui"
 )
 
 var ErrQuit = errors.New("quit requested")

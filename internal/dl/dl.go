@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/axrona/anitr-cli/internal/config"
-	"github.com/axrona/anitr-cli/internal/utils"
+	"github.com/prayjofir/anitr-cli/internal/config"
+	"github.com/prayjofir/anitr-cli/internal/utils"
 )
 
 // Sentinel error tipleri

@@ -13,17 +13,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal"
-	"github.com/axrona/anitr-cli/internal/actions"
-	"github.com/axrona/anitr-cli/internal/config"
-	"github.com/axrona/anitr-cli/internal/helpers"
-	"github.com/axrona/anitr-cli/internal/history"
-	"github.com/axrona/anitr-cli/internal/models"
-	"github.com/axrona/anitr-cli/internal/sources/anizium"
-	"github.com/axrona/anitr-cli/internal/sources/aniziumfree"
-	"github.com/axrona/anitr-cli/internal/ui"
-	"github.com/axrona/anitr-cli/internal/ui/tui"
-	"github.com/axrona/anitr-cli/internal/utils"
+	"github.com/prayjofir/anitr-cli/internal"
+	"github.com/prayjofir/anitr-cli/internal/actions"
+	"github.com/prayjofir/anitr-cli/internal/config"
+	"github.com/prayjofir/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/history"
+	"github.com/prayjofir/anitr-cli/internal/models"
+	"github.com/prayjofir/anitr-cli/internal/sources/anizium"
+	"github.com/prayjofir/anitr-cli/internal/sources/aniziumfree"
+	"github.com/prayjofir/anitr-cli/internal/ui"
+	"github.com/prayjofir/anitr-cli/internal/ui/tui"
+	"github.com/prayjofir/anitr-cli/internal/utils"
 )
 
 // Uygulamanın ana fonksiyonu, anime seçimi, oynatma ve hata yönetimini içerir

@@ -45,7 +45,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/helpers"
 )
 
 // ── Sunucu adayları ────────────────────────────────────────────────────────────

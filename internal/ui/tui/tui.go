@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal"
+	"github.com/prayjofir/anitr-cli/internal"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal/models"
-	"github.com/axrona/anitr-cli/internal/player"
-	"github.com/axrona/anitr-cli/internal/utils"
+	"github.com/prayjofir/anitr-cli/internal/models"
+	"github.com/prayjofir/anitr-cli/internal/player"
+	"github.com/prayjofir/anitr-cli/internal/utils"
 )
 
 // getHistoryPath cross-platform olarak history.json yolunu döndürür

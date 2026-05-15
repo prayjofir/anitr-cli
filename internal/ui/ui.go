@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/axrona/anitr-cli/internal"
-	"github.com/axrona/anitr-cli/internal/ui/rofi"
-	"github.com/axrona/anitr-cli/internal/ui/tui"
+	"github.com/prayjofir/anitr-cli/internal"
+	"github.com/prayjofir/anitr-cli/internal/ui/rofi"
+	"github.com/prayjofir/anitr-cli/internal/ui/tui"
 )
 
 func ClearScreen() {

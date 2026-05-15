@@ -1,4 +1,4 @@
-module github.com/axrona/anitr-cli
+module github.com/prayjofir/anitr-cli
 
 go 1.23.0
 

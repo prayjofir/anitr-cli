@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/helpers"
 )
 
 // AniziumConfig - kullanıcı oturum bilgileri, diske kaydedilir

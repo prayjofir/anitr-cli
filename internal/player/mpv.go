@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/axrona/anitr-cli/internal/ipc"
+	"github.com/prayjofir/anitr-cli/internal/ipc"
 )
 
 // MPVParams yapısı, MPV oynatıcı parametrelerini tutar.

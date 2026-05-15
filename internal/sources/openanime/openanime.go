@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/axrona/anitr-cli/internal"
-	"github.com/axrona/anitr-cli/internal/helpers"
-	"github.com/axrona/anitr-cli/internal/models"
+	"github.com/prayjofir/anitr-cli/internal"
+	"github.com/prayjofir/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/models"
 )
 
 type OpenAnime struct{}

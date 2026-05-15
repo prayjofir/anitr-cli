@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/axrona/anitr-cli/internal/utils"
+	"github.com/prayjofir/anitr-cli/internal/utils"
 )
 
 // FavoriteEntry tek bir favori kaydı
