@@ -87,10 +87,14 @@ func Version() string {
 
 // Güncellemeleri kontrol eder ve varsa kullanıcıya bildirir
 func CheckUpdates() {
+	// "dev" build'de sürüm kontrolü yapma
+	if version == "dev" || version == "" {
+		return
+	}
+
 	msg, err := FetchUpdates()
 	if err != nil {
-		fmt.Println(ColorRed + "Güncelleme kontrolü sırasında bir hata oluştu: " + err.Error() + ColorReset)
-		time.Sleep(2 * time.Second)
+		// Ağ hatası veya API erişim sorunu — sessizce geç, kullanıcıyı bloklama
 		return
 	}
 
