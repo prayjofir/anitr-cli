@@ -11,6 +11,44 @@ import (
 	"strings"
 )
 
+// ConfigDir platforma göre config dizinini döner.
+// Linux/Mac: ~/.config/anitr-cli
+// Windows:   %APPDATA%\anitr-cli
+func ConfigDir() string {
+	if runtime.GOOS == "windows" {
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			userProfile := os.Getenv("USERPROFILE")
+			if userProfile == "" {
+				if home, err := os.UserHomeDir(); err == nil {
+					userProfile = home
+				} else {
+					userProfile = "."
+				}
+			}
+			appData = filepath.Join(userProfile, "AppData", "Roaming")
+		}
+		primary := filepath.Join(appData, "anitr-cli")
+		legacy := filepath.Join(appData, "AnitrCLI")
+		if _, err := os.Stat(legacy); err == nil {
+			if _, err2 := os.Stat(primary); err2 != nil {
+				return legacy
+			}
+		}
+		return primary
+	}
+	// Linux / macOS
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		if h := os.Getenv("HOME"); h != "" {
+			home = h
+		} else {
+			home = "."
+		}
+	}
+	return filepath.Join(home, ".config", "anitr-cli")
+}
+
 // IsValidImage, verilen URL'nin geçerli bir görsel olup olmadığını kontrol eder.
 func IsValidImage(url string) bool {
 	client := &http.Client{}
@@ -67,19 +105,19 @@ func Ptr[T any](val T) *T {
 
 // DefaultDownloadDir işletim sistemine göre varsayılan indirme dizinini döner
 func DefaultDownloadDir() string {
-	if runtime.GOOS == "windows" {
-		userProfile := os.Getenv("USERPROFILE")
-		if userProfile == "" {
-			userProfile = "." // fallback
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		// Fallback: ortam değişkenlerine bak
+		if runtime.GOOS == "windows" {
+			home = os.Getenv("USERPROFILE")
+		} else {
+			home = os.Getenv("HOME")
 		}
-		return filepath.Join(userProfile, "Downloads", "anitr-cli")
-	} else {
-		home := os.Getenv("HOME")
 		if home == "" {
 			home = "."
 		}
-		return filepath.Join(home, "Downloads", "anitr-cli")
 	}
+	return filepath.Join(home, "Downloads", "anitr-cli")
 }
 
 var episodeRegex = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*\.?\s*Bölüm`)

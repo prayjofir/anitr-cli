@@ -14,21 +14,16 @@ import (
 
 // getHistoryPath cross-platform olarak history.json yolunu döndürür
 func getHistoryPath() (string, error) {
-	// ConfigDir() ile aynı yeri kullanarak platformlar arasında tutarlılık sağlar.
 	historyDir := utils.ConfigDir()
-
-	// Klasör yoksa oluştur
 	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		return "", fmt.Errorf("history klasörü oluşturulamadı: %w", err)
 	}
-
 	return filepath.Join(historyDir, "history.json"), nil
 }
 
 // GetHistoryPath history.json dosyasının tam yolunu döner
-// Klasör mevcut değilse oluşturur.
 func GetHistoryPath() (string, error) {
-    return getHistoryPath()
+	return getHistoryPath()
 }
 
 // ReadAnimeHistory history.json'u okur, yoksa yeni oluşturur
@@ -37,7 +32,6 @@ func ReadAnimeHistory() (models.AnimeHistory, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -45,7 +39,6 @@ func ReadAnimeHistory() (models.AnimeHistory, error) {
 		}
 		return nil, fmt.Errorf("history okunamadı: %w", err)
 	}
-
 	var history models.AnimeHistory
 	if err := json.Unmarshal(data, &history); err != nil {
 		return nil, fmt.Errorf("history parse edilemedi: %w", err)
@@ -69,66 +62,99 @@ func WriteAnimeHistory(history models.AnimeHistory) error {
 	return nil
 }
 
-// UpdateAnimeHistory, mevcut MPV oturumu sırasında animeyi history.json'a kaydeder
-func UpdateAnimeHistory(socketPath, source, animeName, episodeName, animeId string, episodeIndex int, logserv *models.LogServ) {
-	ticker := time.NewTicker(10 * time.Second)
+// DeleteAnimeHistory — belirtilen animeni geçmişten siler
+func DeleteAnimeHistory(source, animeName string) error {
+	hist, err := ReadAnimeHistory()
+	if err != nil {
+		return err
+	}
+	if sourceData, ok := hist[source]; ok {
+		delete(sourceData, animeName)
+		hist[source] = sourceData
+	}
+	return WriteAnimeHistory(hist)
+}
+
+// UpdateAnimeHistory — MPV oturumu boyunca pozisyonu ve tamamlanma durumunu kaydeder.
+//
+//   - Her 10 saniyede bir `time-pos` okunur ve diske yazılır.
+//   - İzlenme %90'ı geçtiyse bölüm "bitti" (IsFinished=true) olarak işaretlenir.
+//   - totalEpisodeCount: o anki toplam bölüm sayısı (yeni bölüm tespiti için).
+func UpdateAnimeHistory(
+	socketPath, source, animeName, episodeName, animeId string,
+	episodeIndex, totalEpisodeCount int,
+	isMovie bool,
+	logserv *models.LogServ,
+) {
+	saveHistory := func(positionSec *float64, isFinished bool) {
+		hist, err := ReadAnimeHistory()
+		if err != nil {
+			utils.LogError(logserv, err)
+			return
+		}
+		sourceEntry, ok := hist[source]
+		if !ok {
+			sourceEntry = make(map[string]models.AnimeHistoryEntry)
+		}
+		now := time.Now()
+		sourceEntry[animeName] = models.AnimeHistoryEntry{
+			LastEpisodeIdx:    &episodeIndex,
+			LastEpisodeName:   episodeName,
+			AnimeId:           &animeId,
+			LastWatched:       &now,
+			LastPositionSec:   positionSec,
+			IsFinished:        isFinished,
+			TotalEpisodeCount: totalEpisodeCount,
+			IsMovie:           isMovie,
+		}
+		hist[source] = sourceEntry
+		if err := WriteAnimeHistory(hist); err != nil {
+			utils.LogError(logserv, err)
+		}
+	}
+
+	// İlk kayıt — MPV başlar başlamaz
+	saveHistory(nil, false)
+
+	ticker := time.NewTicker(5 * time.Second) // 5s'de bir güncelle (10s yerine)
 	defer ticker.Stop()
 
-	updated := false
+	var lastKnownPos *float64
+	lastKnownFinished := false
+
 	for range ticker.C {
 		if !player.IsMPVRunning(socketPath) {
 			break
 		}
 
-		durationVal, err1 := player.MPVSendCommand(socketPath, []interface{}{"get_property", "duration"})
-		timePosVal, err2 := player.MPVSendCommand(socketPath, []interface{}{"get_property", "time-pos"})
+		timePosVal, err1 := player.MPVSendCommand(socketPath, []interface{}{"get_property", "time-pos"})
+		durationVal, err2 := player.MPVSendCommand(socketPath, []interface{}{"get_property", "duration"})
 		if err1 != nil || err2 != nil {
 			continue
 		}
 
-		duration, ok1 := durationVal.(float64)
-		progress, ok2 := timePosVal.(float64)
-		if !ok1 || !ok2 {
+		timePos, ok1 := timePosVal.(float64)
+		duration, ok2 := durationVal.(float64)
+		if !ok1 || !ok2 || duration <= 0 {
 			continue
 		}
 
-		if updated {
-			continue
+		progress := timePos / duration
+		if progress >= 0.9 {
+			// Bölüm tamamlandı — pozisyonu sıfırla, bitti olarak işaretle
+			saveHistory(nil, true)
+			lastKnownFinished = true
+			break
+		} else {
+			// Devam ediyor — mevcut pozisyonu kaydet
+			pos := timePos
+			lastKnownPos = &pos
+			saveHistory(lastKnownPos, false)
 		}
+	}
 
-		if progress >= duration-300 { // son 5 dakika
-			history, err := ReadAnimeHistory()
-			if err != nil {
-				utils.LogError(logserv, err)
-				continue
-			}
-
-			sourceEntry, ok := history[source]
-			if !ok {
-				sourceEntry = make(map[string]models.AnimeHistoryEntry)
-			}
-
-			animeEntry, ok := sourceEntry[animeName]
-			if !ok {
-				animeEntry = models.AnimeHistoryEntry{}
-			}
-
-			time := time.Now()
-
-			animeEntry = models.AnimeHistoryEntry{
-				LastEpisodeIdx:  &episodeIndex,
-				LastEpisodeName: episodeName,
-				AnimeId:         &animeId,
-				LastWatched:     &time,
-			}
-			sourceEntry[animeName] = animeEntry
-			history[source] = sourceEntry
-
-			if err := WriteAnimeHistory(history); err != nil {
-				utils.LogError(logserv, err)
-				continue
-			}
-			updated = true
-		}
+	// MPV kapandı — henüz bitmemişse son bilinen pozisyonu kaydet
+	if !lastKnownFinished {
+		saveHistory(lastKnownPos, false)
 	}
 }

@@ -16,9 +16,12 @@ import (
 
 // MPVParams yapısı, MPV oynatıcı parametrelerini tutar.
 type MPVParams struct {
-	Url         string  // Oynatılacak video URL'si
-	SubtitleUrl *string // Altyazı URL'si (isteğe bağlı)
-	Title       string  // Video başlığı
+	Url              string
+	SubtitleUrl      *string
+	SubtitleUrls     []string
+	Title            string
+	StartPositionSec float64
+	LuaScript        string // geçici Lua script yolu (chapter inject + skip için)
 }
 
 // isMPVInstalled fonksiyonu, sistemde MPV oynatıcısının yüklü olup olmadığını kontrol eder.
@@ -79,9 +82,27 @@ func Play(params MPVParams) (*exec.Cmd, string, error) {
 			"--referrer=https://yeshi.eu.org/")
 	}
 
-	// Eğer altyazı URL'si varsa, altyazı dosyasını ekle
-	if params.SubtitleUrl != nil && *params.SubtitleUrl != "" {
+	// Altyazı URL'lerini ekle (SubtitleUrls öncelikli, yoksa SubtitleUrl kullan)
+	if len(params.SubtitleUrls) > 0 {
+		for _, subURL := range params.SubtitleUrls {
+			if subURL != "" {
+				args = append(args, fmt.Sprintf("--sub-file=%s", subURL))
+			}
+		}
+		// TR önce sıralanmış, MPV ilk altyazıyı varsayılan yapar
+		args = append(args, "--slang=tr,en,ja,de,fr,es,it,ar") // tercih sırası
+	} else if params.SubtitleUrl != nil && *params.SubtitleUrl != "" {
 		args = append(args, fmt.Sprintf("--sub-file=%s", *params.SubtitleUrl))
+	}
+
+	// Başlama pozisyonu (devam izleme)
+	if params.StartPositionSec > 0 {
+		args = append(args, fmt.Sprintf("--start=%.0f", params.StartPositionSec))
+	}
+
+	// Lua script (chapter inject + [A] skip için)
+	if params.LuaScript != "" {
+		args = append(args, fmt.Sprintf("--script=%s", params.LuaScript))
 	}
 
 	// Video URL'sini ekle

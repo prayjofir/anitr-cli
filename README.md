@@ -1,170 +1,218 @@
-<div align="center">
+# anitr-cli
 
-<h1>anitr-cli</h1>
-<h3>Terminalde Türkçe altyazılı anime arama ve izleme aracı 🚀</h3>
-
-<img src="https://raw.githubusercontent.com/axrona/anitr-cli/main/assets/anitr-preview.gif" alt="anitr-cli preview" width="600"/>
-
-<p>
-  
-[![Lisans: GPL3](https://img.shields.io/github/license/axrona/anitr-cli?style=for-the-badge&logo=opensourceinitiative&logoColor=white&label=Lisans)](https://github.com/axrona/anitr-cli/blob/main/LICENSE)
-[![Go Versiyon](https://img.shields.io/badge/Go-1.23+-blue?style=for-the-badge&logo=go&logoColor=white)](https://golang.org/dl/)
-[![Release](https://img.shields.io/github/v/release/axrona/anitr-cli?style=for-the-badge&logo=github&logoColor=white&label=Son%20Sürüm)](https://github.com/axrona/anitr-cli/releases/latest)
-[![AUR](https://img.shields.io/aur/version/anitr-cli?style=for-the-badge&logo=archlinux&logoColor=white&label=AUR)](https://aur.archlinux.org/packages/anitr-cli)
-    
-</p>
-
-</div>
+**anitr-cli**, terminal üzerinden Türkanime ve Anizium kaynaklarını kullanarak anime aramanızı, bölümleri listelemenizi ve doğrudan MPV üzerinden izlemenizi sağlayan hızlı ve modern bir CLI aracıdır.
 
 ---
 
-> [!IMPORTANT]
-> Bu projeyi geliştirmeyi bıraktım. Go öğrenirken deneme amaçlı geliştirmiştim ve kod tabanı çok kötü yazılmıştı. Ayrıca OpenAnime API erişimi kapatıldığından OpenAnime üzerinden anime izleyemiyorsunuz. AnimeciX tarafı halen kullanılabilir, ancak projeyi ilerletmeyi düşünmüyorum. Dileyenler çatallayıp devam ettirebilir.
+## 🚀 Özellikler
 
-## 🎬 Özellikler
-
-- **Cross-Platform**: Linux, Windows ve macOS üzerinde çalışabilir.
-- **AnimeCix ve OpenAnime Entegrasyonu**: Popüler anime platformlarından hızlı arama ve izleme.
-- **Fansub Seçimi**: OpenAnime üzerinden izlerken istediğin çeviri grubunu seçebilirsin.
-- **Sezon Playlist**: Tüm sezonu otomatik sırayla izlemenizi sağlar, her bölüm arası menüye dönmenize gerek yok!
-- **İzleme Geçmişi**: İzlediğin animeler kaydedilir, kaldığın bölümden devam edebilirsin.
-- **Arayüz Esnekliği**: Terminal tabanlı TUI ya da minimalist Rofi arayüzünden dilediğini kullan.
-- **İndirme Özelliği**: Animeleri indirip internet olmadan da izleme özgürlüğü.
-- **Discord Rich Presence**: O an izlediğin animeyi Discord profilinde göster.
-- **Otomatik Güncelleme Kontrolü**: Açılışta yeni sürüm varsa otomatik olarak haber verir.
+- **Çoklu Kaynak Desteği:** Türkanime ve Anizium üzerinden içerik çekme.
+- **TUI/GUI Seçim Menüsü:** `fzf` veya `rofi` araçlarını otomatik algılayarak interaktif menüler oluşturur.
+- **MPV Entegrasyonu:** Seçtiğiniz bölümleri doğrudan MPV oynatıcısı üzerinden reklamsız izleme.
+- **Bölüm Geçmişi ve Otomatik İlerleme:** İzlenen bölümler kaydedilir; geçmişten seçince bir sonraki bölüm doğrudan başlar.
+- **Çoklu Altyazı Desteği:** Tüm altyazı dilleri MPV'ye aynı anda yüklenir, tercih edilen önce gelir.
+- **Gelişmiş Anizium Entegrasyonu:** Hesap girişi, profil seçimi, PIN doğrulaması, kalite/ses/altyazı tercihleri.
 
 ---
 
-## ⚡ Kurulum
+## 🛠️ Kurulum
 
-### 🐧 Linux
+### Gereksinimler
 
-#### Arch tabanlı dağıtımlar (AUR):
+- [Go](https://go.dev/doc/install) (1.20 veya üzeri)
+- [mpv](https://mpv.io/installation/)
+- [fzf](https://github.com/junegunn/fzf) veya [rofi](https://github.com/davatorium/rofi)
 
-```bash
-yay -S anitr-cli
-```
-
-ya da
-
-```bash
-paru -S anitr-cli
-```
-
-#### Diğer Linux dağıtımları:
-
-```bash
-curl -sS https://raw.githubusercontent.com/axrona/anitr-cli/main/install.sh | bash
-```
-
-ya da
+### Kaynaktan Derleme
 
 ```bash
 git clone https://github.com/axrona/anitr-cli.git
 cd anitr-cli
-git fetch --tags
-make install-linux
-```
-
-> **Gereksinimler:**  
-> Derleme: `go`, `git`, `make`  
-> Kullanım: `mpv`  
-> İsteğe bağlı: `rofi` (Rofi arayüzü için), `youtube-dl`/`yt-dlp` (Bölüm indirme özelliği için)
-
-**Paketleri yüklemek için:**
-
-> [!WARNING]  
-> Debian repolarında Go sürümü 1.23'den eski olabilir. Bu yüzden snap ile (`sudo snap install go --classic`) ya da manuel kurulum gerekebilir.
-
-- **Debian/Ubuntu:**
-  ```bash
-  sudo apt update
-  sudo apt install golang git make mpv rofi yt-dlp
-  ```
-- **Arch/Manjaro:**
-  ```bash
-  sudo pacman -S go git make mpv rofi yt-dlp
-  ```
-- **Fedora:**
-  ```bash
-  sudo dnf install golang git make mpv rofi yt-dlp
-  ```
-- **openSUSE:**
-  ```bash
-  sudo zypper install go git make mpv rofi yt-dlp
-  ```
-
-### 🪟 Windows
-
-> [!NOTE]
-> Windows sürümünde GUI bulunmaz, yalnızca TUI ile çalışır.
-
-1. Sisteminizde [**MPV**](https://sourceforge.net/projects/mpv-player-windows/files/) kurulu olmalıdır.
-2. [Releases](https://github.com/axrona/anitr-cli/releases) sayfasından `anitr-cli.exe` indirin.
-3. `C:\Program Files\anitr-cli` klasörünü oluşturun.
-4. `anitr-cli.exe` dosyasını bu klasöre taşıyın.
-5. PATH’e `C:\Program Files\anitr-cli` ekleyin.
-6. Anime indirebilmek için [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest) veya [youtube-dl](https://github.com/ytdl-org/youtube-dl/releases) indirin ve PATH'e ekleyin. (Opsiyonel)
-
-Artık **cmd** veya **PowerShell** içinde anitr-cli çalıştırabilirsiniz.
-
-### 💻 MacOS
-
-> [!WARNING]
-> Mac cihazım olmadığından dolayı **anitr-cli** MacOS üzerinde test edilmedi.
-> Ancak, Linux'ta kullanılan yöntemlerle kurulup çalışması oldukça muhtemeldir. Herhangi bir sorunla karşılaşırsanız lütfen [**issue**](https://github.com/axrona/anitr-cli/issues) açınız.
-
-**Kurulum (Manuel)**:
-
-```bash
-git clone https://github.com/axrona/anitr-cli.git
-cd anitr-cli
-git fetch --tags
-make install-macos
-```
-
-Anime indirebilmek için [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest) veya [youtube-dl](https://github.com/ytdl-org/youtube-dl/releases) yüklemeniz gerekmektedir:
-
-```bash
-brew install yt-dlp
-```
-
-ya da
-
-```bash
-brew install youtube-dl
+go build -o anitr
+sudo mv anitr /usr/local/bin/
 ```
 
 ---
 
-## 🚀 Kullanım
+## 🎮 Kullanım
 
 ```bash
-anitr-cli [alt komut] [bayraklar]
+anitr
 ```
 
-```
-Bayraklar:
-  --disable-rpc       Discord Rich Presence desteğini devre dışı bırakır.
-  --go                Son izlenen anime bölümünü açar.
-  --version, -v       Sürüm bilgisini gösterir
-  --help, -h          Yardım menüsünü gösterir
-  --rofi              [Kullanımdan kaldırıldı] Yerine rofi alt komutunu kullanın (Sadece Linux)
+### Temel Akış
+1. **Kaynak Seçimi:** `Türkanime` veya `Anizium` seçin.
+2. **Arama:** İzlemek istediğiniz animenin adını yazın.
+3. **Bölüm Seçimi:** Çıkan listeden bölümü seçin.
+4. **İzleme:** MPV otomatik açılır.
 
-Alt komutlar: (Sadece Linux)
-  rofi                  Rofi arayüzü ile başlatır
-     -f, --rofi-flags      Rofi’ye özel parametreler (örn: --rofi-flags="-theme mytheme")
-  tui                   Terminal arayüzü ile başlatır
+### Geçmiş Özelliği
+- Son 10 izlenen anime geçmişe kaydedilir.
+- Geçmişten bir anime seçince **menü gösterilmeden** doğrudan bir sonraki bölüm başlar.
+- History: `~/.anitr-cli/history.json`
+
+### Anizium Hesabına Giriş
+1. Ana Menü → **"Anizium'a Giriş Yap"**
+2. E-posta ve şifrenizi girin.
+3. Profilinizi seçin (PIN varsa girin).
+4. Bilgiler `~/.config/anitr-cli/anizium.json` dosyasına kaydedilir.
+
+---
+
+## ⚙️ Ayarlar
+
+Ana Menü → **"Ayarlar"** üzerinden yapılandırılabilir:
+
+| Ayar | Seçenekler | Açıklama |
+|---|---|---|
+| **Tercih Edilen Kalite** | 4K / 2K / 1080p / 720p / 480p / **Sor** | `Sor` seçilirse her izlemede kalite seçim menüsü açılır |
+| **Tercih Edilen Ses** | Japonca / Türkçe Dublaj / İngilizce Dublaj / **Sor** | Otomatik ses seçimi veya her seferinde sor |
+| **Tercih Edilen Altyazı** | tr / en / de / fr / ... / **Sor** | Tercih edilen dil MPV'de ilk altyazı olur |
+
+---
+
+## 🗂️ Proje Yapısı (Anizium odaklı)
+
+```
+internal/
+├── sources/anizium/
+│   ├── anizium.go       # Ana kaynak; GetWatchData (API tabanlı, CDN probe yok)
+│   ├── auth.go          # Login, FetchVideoGroups, FetchSubtitleVTT
+│   └── cdn_probe.go     # ⭐ ARŞİV: Hesapsız erişim için CDN probe kodu (ileride kullanılabilir)
+├── actions/
+│   └── actions.go       # PlayAnimeLoop, autoPlay, çoklu altyazı mantığı
+├── cli/
+│   └── cli.go           # Ana menü, geçmiş, ayarlar
+└── player/
+    └── mpv.go           # MPVParams (SubtitleUrls desteği), Play()
 ```
 
 ---
 
-## 💡 Sorunlar & Katkı
+## 📋 Yapılan Değişiklikler (2026-05-04 ~ 05)
 
-Her türlü hata, öneri veya katkı için [issue](https://github.com/axrona/anitr-cli/issues) açabilirsiniz. Katkılarınızı bekliyoruz!
+### 🔧 Hata Düzeltmeleri
+
+#### Geçmiş Sistemi
+- **Kritik:** Anizium için `animeId` history'ye boş string (`""`) kaydediliyordu.
+  - **Neden:** `selectedAnimeId` sadece `animecix` için int ID alıyor, `anizium` slug yoluna düşüyordu (Anizium'un slug'ı yok → boş kalıyordu).
+  - **Çözüm:** `animecix || anizium` kontrolü eklendi, her ikisi de `strconv.Itoa(selectedAnimeID)` kullanıyor.
+
+#### Geçmişten Oynatma
+- **Kritik:** `cfx.AnimeHistory` program başında bir kere yükleniyordu. Kullanıcı bölüm izleyip geçmişe dönünce bellekteki kopya güncellenmemiş oluyordu → 1. bölümden başlıyordu.
+  - **Çözüm:** Geçmişten oynatma öncesi `history.ReadAnimeHistory()` ile diskten taze okuma yapılıyor.
+
+#### `goto` Derleme Hatası
+- `goto playSwitch`, `menuTitle` değişkeninin deklarasyonunu atlıyordu.
+  - **Çözüm:** `goto` kaldırıldı, `if/else` bloğuna dönüştürüldü.
+
+#### `anime data eksik` Hatası
+- `GetAnimeByID` hatası geçmiş akışını tamamen durduruyordu.
+  - **Çözüm:** `GetAnimeByID` artık fatal değil; başarısız olursa history'deki anime adı fallback olarak kullanılıyor.
 
 ---
 
-## 📜 Lisans
+### ✨ Yeni Özellikler
 
-Bu proje [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html) ile lisanslanmıştır. Detaylar için [LICENSE](LICENSE)
+#### Geçmiş Tabanlı Otomatik Oynatma (Auto-Play)
+- Geçmişten anime seçilince `autoPlay: true` ile `PlayAnimeLoop` çağrılıyor.
+- Ana menü **gösterilmeden** `lastEpisodeIdx + 1`. bölüm direkt başlıyor.
+- Sonraki oturumlarda aynı animeden devam eder.
+
+#### Sezon Ayırıcıları
+- `buildSeasonDisplay` helper'ı; bölüm listesine `"────── N. Sezon ──────"` ayırıcıları enjekte ediyor.
+- TUI'da `seasonSeparatorItem` ile greyed-out/non-selectable olarak gösteriliyor.
+- İndirme multi-select ekranında da aynı ayırıcılar var, seçilemez.
+
+#### 2K (1440p) Kalite Desteği
+- Ayarlar → Tercih Edilen Kalite: `"2K"` eklendi.
+- Anizium API'den `quality: 1440` → `"2K"` etiketi.
+- `preferredStart: "1440p"` filtrelemesi çalışıyor.
+
+#### "Sor" Kalite Modu
+- `"Otomatik (En yüksek mevcut)"` → **`"Sor (Manuel seç)"`** olarak değiştirildi.
+- `PreferredQuality == ""` (Sor) seçilince:
+  - `skip_sound_preference: true` ile API çağrılıyor → tüm kalite+ses kombinasyonları geliyor.
+  - Her `İzle` basışında kalite/ses seçim menüsü açılıyor.
+
+#### Çoklu Altyazı MPV Desteği
+- `MPVParams.SubtitleUrls []string` eklendi.
+- Tüm altyazı dilleri (TR, EN, DE, FR, ES, IT, AR...) aynı anda MPV'ye `--sub-file=URL` olarak geçiliyor.
+- **VTT indirme yok** — URL'ler direkt MPV'ye veriliyor.
+- Sıralama: `tercih edilen → TR → EN → diğerleri`
+- `--slang=tr,en,ja,...` ile MPV varsayılan altyazıyı seçiyor.
+- MPV içinde `J` tuşuyla altyazılar arasında geçiş yapılabilir.
+
+---
+
+### ⚡ Performans İyileştirmeleri
+
+#### CDN Probe → Authenticated API (En Büyük Değişiklik)
+
+**Eski sistem:**
+```
+12 CDN sunucusu × 5 kalite × 3 ses = 180 HEAD isteği
+Her istek: 4 saniyelik timeout
+Toplam süre: 5-30 saniye
+```
+
+**Yeni sistem:**
+```
+1 API çağrısı: GET /anime/source?id=X&plan=Y&season=Z&episode=W
+Yanıt: tüm kaliteler + sesler + altyazılar tek seferde
+Süre: ~1 saniye
+```
+
+Anizium'un `/anime/source` API endpoint'i yanıtında `groups` alanı bulunduğu keşfedildi:
+```json
+{
+  "groups": [
+    { "group": "trdub", "items": [
+        { "link": "https://x.aniziumserver.site/95479/1/1/1080p.trdub.mp4", "quality": 1080 }
+    ]},
+    { "group": "original", "items": [...] }
+  ],
+  "subtitles": [...],
+  "content": { "next_episode_data": {...} }
+}
+```
+
+**Arşivlenen CDN kodu:** `internal/sources/anizium/cdn_probe.go`
+- `ProbeCDNForURL()` — belirli kalite/ses için çalışan URL bulur
+- `ProbeCDNAll()` — tüm kombinasyonları tarar
+- Hesap gerektirmeyen gelecekteki projeler için korundu
+- URL pattern: `https://<server>/<tmdb_id>/<season>/<episode>/<quality>.<sound>.mp4`
+
+---
+
+## 🔮 Sonraki Adımlar (Yarın)
+
+### Planlanan
+- [ ] **Hesapsız izleyici projesi** — `cdn_probe.go`'daki pattern kullanılarak hesap gerektirmeyen ayrı bir CLI veya API servisi yapılabilir. TMDB ID'si Anizium search API'sinden (auth gerektirmez) alınabilir.
+- [ ] Potansiyel: Anizium `content.next_episode_data` alanından sonraki bölüm linkini direkt kullanmak (şu an API'de mevcut)
+
+### Mevcut Bilinen Eksikler
+- `autoPlayTriggered` bayrağı aynı animeden çıkıp geri girilince sıfırlanıyor (istenen davranış) ✅
+- `clearMPVCache` fonksiyonu hâlâ mevcut, disk bloat sorunu yok
+
+---
+
+## ⚙️ Teknik Detaylar (Anizium API)
+
+- **Login:** POST `https://api.anizium.co/user/login` — XOR şifreli payload + `Cf-Control` header
+- **Profiller:** GET `https://api.anizium.co/user/get` — session token ile
+- **Anime Arama:** GET `https://api.anizium.co/page/search?value=X` — auth gerektirmez
+- **Anime Detay:** GET `https://api.anizium.co/anime/get?id=X` — auth gerektirmez
+- **Video + Altyazı:** GET `https://api.anizium.co/anime/source?id=X&plan=Y&season=Z&episode=W&server=1` — auth gerekli
+- **`Cf-Control` Header:** Günün adını içeren XOR şifreli dinamik token
+- **Config:** `~/.config/anitr-cli/anizium.json` — email, user_id, token, plan
+
+---
+
+## 🤝 Katkıda Bulunma
+
+Hata bildirimleri ve pull request'ler kabul edilir.
+
+## 📄 Lisans
+
+MIT Lisansı — `LICENSE` dosyasına bakın.

@@ -65,10 +65,14 @@ type LogServ struct {
 
 // AnimeHistoryEntry, her anime için tutulacak bilgiler
 type AnimeHistoryEntry struct {
-	LastEpisodeIdx  *int       `json:"lastEpisodeIdx"`
-	LastEpisodeName string     `json:"lastEpisodeName"`
-	AnimeId         *string    `json:"animeId"`
-	LastWatched     *time.Time `json:"lastWatched"`
+	LastEpisodeIdx    *int       `json:"lastEpisodeIdx"`
+	LastEpisodeName   string     `json:"lastEpisodeName"`
+	AnimeId           *string    `json:"animeId"`
+	LastWatched       *time.Time `json:"lastWatched"`
+	LastPositionSec   *float64   `json:"lastPositionSec,omitempty"`   // Kaldığı saniye (bitmişse nil)
+	IsFinished        bool       `json:"isFinished,omitempty"`         // Bölüm %90+ izlendiyse true
+	TotalEpisodeCount int        `json:"totalEpisodeCount,omitempty"` // Son izlemede toplam bölüm sayısı
+	IsMovie           bool       `json:"isMovie,omitempty"`           // Film mi? (bölüm yükleme için)
 }
 
 // AnimeHistory, source -> anime adı -> struct
@@ -138,9 +142,33 @@ type EpisodeParams struct {
 	SeasonID *int    // Sezon ID'si (nullable)
 }
 
+// WatchSubtitle, bir altyazı seçeneğini temsil eder.
+type WatchSubtitle struct {
+	Group string // dil kodu: "tr", "en" vb.
+	Label string // görünen ad: "Türkçe", "İngilizce" vb.
+	Link  string // ham VTT URL'si (henüz indirilmedi)
+}
+
+// NextEpisodeData, API'nin döndürdüğü bir sonraki bölüm bilgisini temsil eder.
+type NextEpisodeData struct {
+	Season  int // Bir sonraki bölümün sezonu
+	Episode int // Bir sonraki bölümün numarası
+}
+
+// OpeningData, bir bölümün intro/opening zaman aralığını temsil eder.
+type OpeningData struct {
+	Start string // "00:01:01"
+	End   string // "00:02:31"
+}
+
 // Watch yapısı, bir anime'yi izlerken gerekli olan izleme bilgilerini içerir.
 type Watch struct {
-	Labels    []string // Etiketler ("1080", "720p", vb.)
-	Urls      []string // İzleme URL'leri
-	TRCaption *string  // Türkçe altyazı (nullable)
+	Labels      []string        // Etiketler ("1080", "720p", vb.)
+	Urls        []string        // İzleme URL'leri
+	TRCaption   *string         // Varsayılan altyazı yerel dosya yolu (nullable)
+	Subtitles   []WatchSubtitle // Tüm altyazı seçenekleri (ham linkler)
+	WarnMessage string          // Ses/kalite fallback uyarı mesajı (boşsa gösterilmez)
+	NextEpisode *NextEpisodeData // API'den gelen sonraki bölüm bilgisi (nil ise son bölüm)
+	Opening     *OpeningData    // Intro/opening zaman aralığı (MPV chapter için)
+	Ending      *OpeningData    // Ending/outro zaman aralığı (MPV chapter için)
 }

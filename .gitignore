@@ -37,6 +37,11 @@
 # Windows image file thumbs
 Thumbs.db
 
-# Binary file
+# Compiled binaries (go build çıktıları)
 /build
 anitr-cli
+anitr
+probe_subtitle
+
+# AI geliştirme bağlamı — kişisel, repoya girmemeli
+AI_STATE.md

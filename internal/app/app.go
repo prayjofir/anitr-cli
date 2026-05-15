@@ -17,6 +17,8 @@ import (
 	"github.com/axrona/anitr-cli/internal/history"
 	"github.com/axrona/anitr-cli/internal/models"
 	"github.com/axrona/anitr-cli/internal/sources/animecix"
+	"github.com/axrona/anitr-cli/internal/sources/anizium"
+	"github.com/axrona/anitr-cli/internal/sources/aniziumfree"
 	"github.com/axrona/anitr-cli/internal/sources/openanime"
 	"github.com/axrona/anitr-cli/internal/update"
 	"github.com/axrona/anitr-cli/internal/utils"
@@ -37,10 +39,10 @@ func runMain(cmd *cobra.Command, f *flags.Flags, UiMode string, Logger *models.L
 		utils.LogError(Logger, fmt.Errorf(fmt.Sprintf("Geçmiş yüklenemedi: %s", err)))
 	}
 
-	// Uygulama durumunu başlat
+	// Uygulama durumunu başlat — varsayılan: AnimeciX
 	currentApp := &models.App{
-		Source:         helpers.Ptr(models.AnimeSource(openanime.OpenAnime{})),
-		SelectedSource: helpers.Ptr("OpenAnime"),
+		Source:         helpers.Ptr(models.AnimeSource(animecix.AnimeCix{})),
+		SelectedSource: helpers.Ptr("AnimeciX"),
 		UiMode:         &UiMode,
 		RofiFlags:      &f.RofiFlags,
 		DisableRPC:     &DisableRPC,
@@ -50,30 +52,29 @@ func runMain(cmd *cobra.Command, f *flags.Flags, UiMode string, Logger *models.L
 	}
 
 	// Configi yükle
-	cfg, err := config.LoadConfig(filepath.Join(utils.ConfigDir(), "config.json"))
+	configPath := filepath.Join(utils.ConfigDir(), "config.json")
+	cfg, err := config.LoadConfig(configPath)
 	if err == nil {
-		if cfg.DefaultSource != "" {
-			// Config'te default_source varsa, onu kullan
-			switch strings.ToLower(cfg.DefaultSource) {
-			case "openanime":
-				currentApp.Source = helpers.Ptr(models.AnimeSource(openanime.OpenAnime{}))
-				currentApp.SelectedSource = helpers.Ptr("OpenAnime")
-			case "animecix":
-				currentApp.Source = helpers.Ptr(models.AnimeSource(animecix.AnimeCix{}))
-				currentApp.SelectedSource = helpers.Ptr("AnimeciX")
-			}
-		} else {
-			// Config'te default_source yoksa OpenAnime kullan
+		// Son kullanılan kaynağı yükle
+		switch strings.ToLower(cfg.LastSource) {
+		case "openanime":
 			currentApp.Source = helpers.Ptr(models.AnimeSource(openanime.OpenAnime{}))
 			currentApp.SelectedSource = helpers.Ptr("OpenAnime")
+		case "animecix":
+			currentApp.Source = helpers.Ptr(models.AnimeSource(animecix.AnimeCix{}))
+			currentApp.SelectedSource = helpers.Ptr("AnimeciX")
+		case "anizium":
+			currentApp.Source = helpers.Ptr(models.AnimeSource(anizium.Anizium{}))
+			currentApp.SelectedSource = helpers.Ptr("Anizium")
+		case "anizium free":
+			currentApp.Source = helpers.Ptr(models.AnimeSource(aniziumfree.AniziumFree{}))
+			currentApp.SelectedSource = helpers.Ptr("Anizium Free")
+		// Boşsa veya tanınmıyorsa AnimeciX kalır (üstte set edildi)
 		}
 
-		// Config'de disable_rpc ayarı varsa
 		if cfg.DisableRPC != nil {
 			currentApp.DisableRPC = cfg.DisableRPC
 		}
-
-		// history_limit ayarı (default: 0 yani unlimited)
 		currentApp.HistoryLimit = cfg.HistoryLimit
 	}
 

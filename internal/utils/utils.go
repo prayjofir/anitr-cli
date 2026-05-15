@@ -14,10 +14,13 @@ import (
 	"time"
 
 	"github.com/axrona/anitr-cli/internal"
+	"github.com/axrona/anitr-cli/internal/helpers"
 	"github.com/axrona/anitr-cli/internal/models"
 	"github.com/axrona/anitr-cli/internal/player"
 	"github.com/axrona/anitr-cli/internal/rpc"
 	"github.com/axrona/anitr-cli/internal/sources/animecix"
+	"github.com/axrona/anitr-cli/internal/sources/anizium"
+	"github.com/axrona/anitr-cli/internal/sources/aniziumfree"
 	"github.com/axrona/anitr-cli/internal/sources/openanime"
 	"github.com/axrona/anitr-cli/internal/ui"
 	"github.com/axrona/anitr-cli/internal/ui/tui"
@@ -42,40 +45,10 @@ func getTempDir() string {
 	return "/tmp"
 }
 
-// ConfigDir platforma göre config dizinini döner
+// ConfigDir platforma göre config dizinini döner.
+// helpers.ConfigDir() üzerinden çağrılır — tek kaynak, tutarlı davranış.
 func ConfigDir() string {
-	if runtime.GOOS == "windows" {
-		// Windows → Öncelikli olarak %APPDATA%\anitr-cli (history yolu ile tutarlı)
-		// Geriye dönük uyumluluk: eğer eski %APPDATA%\AnitrCLI varsa, onu kullanır.
-		appData := os.Getenv("APPDATA")
-		if appData == "" {
-			// fallback → USERPROFILE\AppData\Roaming
-			userProfile := os.Getenv("USERPROFILE")
-			if userProfile == "" {
-				userProfile = "."
-			}
-			appData = filepath.Join(userProfile, "AppData", "Roaming")
-		}
-
-		primary := filepath.Join(appData, "anitr-cli")
-		legacy := filepath.Join(appData, "AnitrCLI")
-
-		if _, err := os.Stat(primary); err == nil {
-			return primary
-		}
-		if _, err := os.Stat(legacy); err == nil {
-			return legacy
-		}
-		// Hiçbiri yoksa varsayılan yolu kullanır.
-		return primary
-	} else {
-		// Linux / Mac → ~/.anitr-cli
-		home := os.Getenv("HOME")
-		if home == "" {
-			home = "."
-		}
-		return filepath.Join(home, ".anitr-cli")
-	}
+	return helpers.ConfigDir()
 }
 
 // OpenPath, verilen dosya veya dizini OS'in varsayılan uygulamasıyla açar
@@ -302,6 +275,65 @@ func UpdateWatchAPI(
 			}
 		}
 
+	case "anizium", "anizium free":
+		if index < 0 || index >= len(episodeData) {
+			return nil, nil, fmt.Errorf("index out of range")
+		}
+
+		watchParams := models.WatchParams{
+			Slug:    slug,
+			Id:      &id,
+			IsMovie: &isMovie,
+			Url:     &episodeData[index].ID,
+			Extra: &map[string]interface{}{
+				"seasonIndex":           seasonIndex,
+				"episodeIndex":          index,
+				"skip_sound_preference": false, // indirme flow'u bunu true yapar
+			},
+		}
+
+		var watches []models.Watch
+		if source == "anizium free" {
+			watches, err = aniziumfree.AniziumFree{}.GetWatchData(watchParams)
+		} else {
+			watches, err = anizium.Anizium{}.GetWatchData(watchParams)
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("watch API çağrısı başarısız: %w", err)
+		}
+
+		if len(watches) > 0 {
+			w := watches[0]
+			for i := range w.Labels {
+				captionData = append(captionData, map[string]string{
+					"label": w.Labels[i],
+					"url":   w.Urls[i],
+				})
+			}
+			if w.TRCaption != nil {
+				captionURL = *w.TRCaption
+			}
+			// Tüm altyazı seçeneklerini map'e ekle
+			if len(w.Subtitles) > 0 {
+				return map[string]interface{}{
+					"labels":       extractLabels(captionData),
+					"urls":         extractURLs(captionData),
+					"caption_url":  captionURL,
+					"subtitles":    w.Subtitles,
+					"warn_message": w.WarnMessage,
+				}, nil, nil
+			}
+			// Altyazı yoksa, warn_message'ı yine de ilet
+			if w.WarnMessage != "" {
+				return map[string]interface{}{
+					"labels":       extractLabels(captionData),
+					"urls":         extractURLs(captionData),
+					"caption_url":  captionURL,
+					"warn_message": w.WarnMessage,
+				}, nil, nil
+			}
+		}
+
 	case "openanime":
 		if slug == nil {
 			return nil, nil, fmt.Errorf("slug gerekli")
@@ -402,6 +434,22 @@ func UpdateWatchAPI(
 	}, fansubData, nil
 }
 
+func extractLabels(captionData []map[string]string) []string {
+	out := make([]string, 0, len(captionData))
+	for _, item := range captionData {
+		out = append(out, item["label"])
+	}
+	return out
+}
+
+func extractURLs(captionData []map[string]string) []string {
+	out := make([]string, 0, len(captionData))
+	for _, item := range captionData {
+		out = append(out, item["url"])
+	}
+	return out
+}
+
 // GetSelectedEpisodesLinks, seçilen bölümlerin sadece seçilmiş çözünürlük URL'lerini döner
 func GetSelectedEpidodesLinks(
 	source string,
@@ -409,37 +457,76 @@ func GetSelectedEpidodesLinks(
 	selectedFansubIndex int,
 	isMovie bool,
 	slug *string,
-	selectedResolution string, // kullanıcı seçimi: "720p", "1080p", vb.
+	selectedResolution string, // kullanıcı seçimi: "4K (Japonca)", "480p (Türkçe Dublaj)" vb.
 	selectedAnimeID int,
 ) (map[string]string, error) {
-	// result[episodeTitle] = url
 	result := make(map[string]string)
 
 	for _, ep := range episodes {
-		// updateWatchAPI ile tek bölüm için veriyi al
-		data, _, err := UpdateWatchAPI(
-			source,
-			[]models.Episode{ep}, // tek bölüm
-			0,                    // index 0 çünkü slice sadece 1 eleman
-			selectedAnimeID,
-			0, // sezon index kullanılacaksa güncellenebilir
-			selectedFansubIndex,
-			isMovie,
-			slug,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("[%s] updateWatchAPI hatası: %w", ep.Title, err)
+		var labels []string
+		var urls []string
+
+		if source == "anizium" || source == "anizium free" {
+			// İndirme modunda tüm kalite+ses etiketlerini al (tercih filtresi devre dışı)
+			seasonIdx := 0
+			if snRaw, ok := ep.Extra["season_num"]; ok {
+				if snf, ok2 := snRaw.(float64); ok2 {
+					seasonIdx = int(snf) - 1
+				}
+			}
+			wpExtra := map[string]interface{}{
+				"seasonIndex":           seasonIdx,
+				"episodeIndex":          0,
+				"skip_sound_preference": true,
+			}
+			var watches []models.Watch
+			var getWatchErr error
+			wp := models.WatchParams{
+				Id:      &selectedAnimeID,
+				IsMovie: &isMovie,
+				Url:     &ep.ID,
+				Extra:   &wpExtra,
+			}
+			if source == "anizium free" {
+				watches, getWatchErr = aniziumfree.AniziumFree{}.GetWatchData(wp)
+			} else {
+				watches, getWatchErr = anizium.Anizium{}.GetWatchData(wp)
+			}
+			if getWatchErr != nil {
+				return nil, fmt.Errorf("[%s] anizium watch hatası: %w", ep.Title, getWatchErr)
+			}
+			if len(watches) > 0 {
+				labels = watches[0].Labels
+				urls = watches[0].Urls
+			}
+		} else {
+			// Diğer kaynaklar
+			data, _, err := UpdateWatchAPI(
+				source,
+				[]models.Episode{ep},
+				0,
+				selectedAnimeID,
+				0,
+				selectedFansubIndex,
+				isMovie,
+				slug,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("[%s] updateWatchAPI hatası: %w", ep.Title, err)
+			}
+			if lbls, ok := data["labels"].([]string); ok {
+				labels = lbls
+			}
+			if us, ok := data["urls"].([]string); ok {
+				urls = us
+			}
 		}
 
-		labelsIface, ok := data["labels"].([]string)
-		urlsIface, ok := data["urls"].([]string)
-		if !ok {
-			return nil, fmt.Errorf("[%s] labels veya urls bulunamadı", ep.Title)
+		if len(urls) == 0 {
+			return nil, fmt.Errorf("[%s] url bulunamadı", ep.Title)
 		}
-		labels := labelsIface
-		urls := urlsIface
 
-		// seçilen çözünürlük için index bul
+		// Seçilen etiketle eşleşen URL'yi bul
 		resolutionIdx := 0
 		for i, label := range labels {
 			if label == selectedResolution {
@@ -463,12 +550,14 @@ func GetAnimeIDs(source models.AnimeSource, selectedAnime models.Anime) (int, st
 	var selectedAnimeSlug string
 
 	// Kaynağa göre ID veya slug alınır
-	if strings.ToLower(source.Source()) == "animecix" {
-		selectedID := selectedAnime.ID
-		selectedAnimeID = *selectedID
+	if strings.ToLower(source.Source()) == "animecix" || strings.ToLower(source.Source()) == "anizium" || strings.ToLower(source.Source()) == "anizium free" {
+		if selectedAnime.ID != nil {
+			selectedAnimeID = *selectedAnime.ID
+		}
 	} else if strings.ToLower(source.Source()) == "openanime" {
-		selectedSlug := selectedAnime.Slug
-		selectedAnimeSlug = *selectedSlug
+		if selectedAnime.Slug != nil {
+			selectedAnimeSlug = *selectedAnime.Slug
+		}
 	}
 	return selectedAnimeID, selectedAnimeSlug
 }
@@ -476,8 +565,8 @@ func GetAnimeIDs(source models.AnimeSource, selectedAnime models.Anime) (int, st
 // Kullanıcıdan kaynak seçmesini isteyen fonksiyon
 func SelectSource(UiMode, RofiFlags string, defaultSource models.AnimeSource, Logger *models.LogServ) (string, models.AnimeSource) {
 	for {
-		// Kaynak listesi
-		sourceList := []string{"OpenAnime", "AnimeciX"}
+		// Kaynak listesi (OpenAnime şimdilik devre dışı)
+		sourceList := []string{"AnimeciX", "Anizium", "Anizium Free"}
 
 		// Kullanıcıdan seçim al
 		SelectedSource, err := ShowSelection(
@@ -502,10 +591,14 @@ func SelectSource(UiMode, RofiFlags string, defaultSource models.AnimeSource, Lo
 
 		// Kaynağı eşleştir
 		switch src {
-		case "openanime":
-			return SelectedSource, openanime.OpenAnime{}
+		// case "openanime": // OpenAnime şimdilik devre dışı
+		// 	return SelectedSource, openanime.OpenAnime{}
 		case "animecix":
 			return SelectedSource, animecix.AnimeCix{}
+		case "anizium":
+			return SelectedSource, anizium.Anizium{}
+		case "anizium free":
+			return SelectedSource, aniziumfree.AniziumFree{}
 		default:
 			fmt.Printf("\033[31m[!] Geçersiz kaynak seçimi: %s\033[0m\n", SelectedSource)
 			time.Sleep(1500 * time.Millisecond)
@@ -671,7 +764,6 @@ func UpdateDiscordRPC(socketPath string, episodeNames []string, selectedEpisodeI
 			duration, ok1 := durationVal.(float64)
 			timePos, ok2 := timePosVal.(float64)
 			if !ok1 || !ok2 {
-				fmt.Println("süre veya zaman konumu parse edilemedi")
 				continue
 			}
 

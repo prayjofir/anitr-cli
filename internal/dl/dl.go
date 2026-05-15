@@ -3,6 +3,7 @@ package dl
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +31,6 @@ func VideosDir() string {
 		return cfg.DownloadDir
 	}
 
-	// fallback → eski davranış
 	if runtime.GOOS == "windows" {
 		userProfile := os.Getenv("USERPROFILE")
 		if userProfile == "" {
@@ -56,7 +56,6 @@ func NewDownloader(baseDir string) (*Downloader, error) {
 		}
 	}
 
-	// Klasörü oluştur
 	err = os.MkdirAll(baseDir, 0o755)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDirCreate, err)
@@ -65,8 +64,9 @@ func NewDownloader(baseDir string) (*Downloader, error) {
 	return &Downloader{BinPath: bin, BaseDir: baseDir}, nil
 }
 
-// Download -> anime adı + bölüm + url alır, dosyayı indirir
-func (d *Downloader) Download(source, animeName, url string, episodeNumber float64, seasonNumber int) error {
+// Download -> anime adı + bölüm + url alır, dosyayı indirir.
+// subtitlePath boşsa altyazı eklenmez; doluysa video yanına .vtt olarak kopyalanır.
+func (d *Downloader) Download(source, animeName, url string, episodeNumber float64, seasonNumber int, subtitlePath string) error {
 	// Çıkış klasörü
 	outDir := filepath.Join(d.BaseDir, source, animeName)
 	err := os.MkdirAll(outDir, 0o755)
@@ -77,20 +77,49 @@ func (d *Downloader) Download(source, animeName, url string, episodeNumber float
 	// Bölüm numarasını düzgün formatla
 	var epStr string
 	if episodeNumber == float64(int(episodeNumber)) {
-		// Tam sayı bölüm (ör. 12.0 -> 12)
 		epStr = fmt.Sprintf("E%02d", int(episodeNumber))
 	} else {
-		// Ara bölüm (ör. 7.5 -> E07.5)
 		epStr = fmt.Sprintf("E%.1f", episodeNumber)
 	}
 
 	// Dosya adı
 	outFile := filepath.Join(outDir, fmt.Sprintf("S%02d%s.%%(ext)s", seasonNumber, epStr))
 
-	// Komutu çalıştır
+	// Video indir
 	cmd := exec.Command(d.BinPath, "-o", outFile, url)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
 
-	return cmd.Run()
+	// Altyazı varsa video yanına kopyala (MPV/VLC otomatik tanır)
+	if subtitlePath != "" {
+		subDest := filepath.Join(outDir, fmt.Sprintf("S%02d%s.vtt", seasonNumber, epStr))
+		if copyErr := copyFile(subtitlePath, subDest); copyErr != nil {
+			fmt.Printf("\033[33m⚠️  Altyazı kopyalanamadı: %s\033[0m\n", copyErr)
+		} else {
+			fmt.Printf("\033[32m   Altyazı kaydedildi: %s\033[0m\n", filepath.Base(subDest))
+		}
+	}
+
+	return nil
+}
+
+// copyFile, src dosyasını dst'ye kopyalar.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
