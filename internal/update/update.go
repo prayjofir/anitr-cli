@@ -87,14 +87,15 @@ func Version() string {
 
 // Güncellemeleri kontrol eder ve varsa kullanıcıya bildirir
 func CheckUpdates() {
-	// "dev" build'de sürüm kontrolü yapma
-	if version == "dev" || version == "" {
+	// Geçerli bir semver sürümü değilse güncelleme kontrolü yapma
+	// (dev, r47.e05d342 gibi AUR pkgver formatları, boş string, vs.)
+	if _, err := semver.NewVersion(version); err != nil {
 		return
 	}
 
 	msg, err := FetchUpdates()
 	if err != nil {
-		// Ağ hatası veya API erişim sorunu — sessizce geç, kullanıcıyı bloklama
+		// Ağ hatası, rate limit, API erişim sorunu — sessizce geç
 		return
 	}
 
