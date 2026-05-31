@@ -6,7 +6,7 @@
 
 ## 🚀 Özellikler
 
-- **Çoklu Kaynak Desteği:** AnimeciX, Anizium, Anizium Free ve OpenAnime üzerinden içerik çekme.
+- **Çoklu Kaynak Desteği:** AnimeciX, Anizium ve Anizium Free üzerinden içerik çekme.
 - **Anizium Free:** Hesap gerektirmeden Anizium içeriklerini izle — CDN paralel tarama ile otomatik kaynak bulma.
 - **MyAnimeList (Jikan) Entegrasyonu:** Animelerin puan, yayınlanma yılı ve tür gibi bilgilerini MAL üzerinden çeker. Uzun isimli seriler için akıllı fallback arama özelliği içerir.
 - **TUI/GUI Seçim Menüsü:** `fzf` veya `rofi` araçlarını otomatik algılayarak interaktif menüler oluşturur.
@@ -69,7 +69,6 @@ anitr-cli
 | Kaynak | Hesap | Özellik |
 |--------|-------|---------|
 | **AnimeciX** | ❌ Gerekmez | Türkçe altyazılı anime |
-| **OpenAnime** | ❌ Gerekmez | Çeşitli yabancı sunuculardan geniş arşiv |
 | **Anizium** | ✅ Gerekir | 4K/2K kalite, çoklu dil altyazı, Türkçe dublaj |
 | **Anizium Free** | ❌ Gerekmez | Anizium içerikleri hesapsız, TR altyazı ile |
 
