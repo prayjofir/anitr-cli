@@ -547,6 +547,7 @@ func settingsMenu(cfx *models.App) {
 			"Tercih Edilen Kalite : " + qualityLabel(cfg.PreferredQuality),
 			"Tercih Edilen Altyazı : " + subtitleLabel(cfg.PreferredSubtitle),
 			"Tercih Edilen Ses : " + soundLabel(cfg.PreferredSound),
+			"MAL Kullanıcı Adı : " + cfg.MALUsername,
 			"Geri",
 		}
 
@@ -723,7 +724,24 @@ func settingsMenu(cfx *models.App) {
 				changesMade = true
 			}
 
-		case menuOptions[7]: // Geri
+		case menuOptions[7]: // MAL Kullanıcı Adı
+			fmt.Printf("Yeni MAL Kullanıcı Adı (Mevcut: %s): ", cfg.MALUsername)
+			var newMALUser string
+			fmt.Scanln(&newMALUser)
+			if newMALUser != "" {
+				cfg.MALUsername = newMALUser
+				changesMade = true
+			} else {
+				fmt.Print("Boş bırakmak istiyor musunuz? (e/h): ")
+				var confirm string
+				fmt.Scanln(&confirm)
+				if strings.ToLower(confirm) == "e" {
+					cfg.MALUsername = ""
+					changesMade = true
+				}
+			}
+
+		case menuOptions[8]: // Geri
 			return
 		}
 
