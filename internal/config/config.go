@@ -17,6 +17,7 @@ type Config struct {
 	PreferredQuality  string `json:"preferred_quality"`  // "4K", "1080p", "720p", "480p"
 	PreferredSubtitle string `json:"preferred_subtitle"` // "tr", "en", "de", "ar", "fr", "es", "it"
 	PreferredSound    string `json:"preferred_sound"`    // "original", "trdub", "endub", "cndub"
+	MALUsername       string `json:"mal_username"`       // Jikan API izleme listesi için
 }
 
 // LoadConfig config'i yükler

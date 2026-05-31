@@ -14,7 +14,11 @@ type FavoriteEntry struct {
 	Title   string `json:"title"`
 	ID      string `json:"id"`      // anime ID veya slug
 	Source  string `json:"source"` // "anizium", "animecix"
-	IsMovie bool   `json:"isMovie,omitempty"` // film mi?
+	IsMovie bool     `json:"isMovie,omitempty"` // film mi?
+	Score   float64  `json:"score,omitempty"`
+	Year    int      `json:"year,omitempty"`
+	Aired   string   `json:"aired,omitempty"`
+	Genres  []string `json:"genres,omitempty"`
 }
 
 // favoritesPath — favoriler dosyasının yolu
@@ -46,17 +50,31 @@ func saveFavorites(entries []FavoriteEntry) error {
 }
 
 // AddFavorite favoriye anime ekler. Zaten varsa günceller.
-func AddFavorite(title, id, source string, isMovie bool) {
+func AddFavorite(title, id, source string, isMovie bool, score float64, year int, aired string, genres []string) {
 	entries := ReadFavorites()
 	// Zaten var mı? Güncelle
 	for i, e := range entries {
 		if e.ID == id && e.Source == source {
 			entries[i].IsMovie = isMovie // güncelle
+			entries[i].Score = score
+			entries[i].Year = year
+			entries[i].Aired = aired
+			entries[i].Genres = genres
 			_ = saveFavorites(entries)
 			return
 		}
 	}
-	entries = append(entries, FavoriteEntry{Title: title, ID: id, Source: source, IsMovie: isMovie})
+	// Yoksa yeni ekle
+	entries = append(entries, FavoriteEntry{
+		Title:   title,
+		ID:      id,
+		Source:  source,
+		IsMovie: isMovie,
+		Score:   score,
+		Year:    year,
+		Aired:   aired,
+		Genres:  genres,
+	})
 	_ = saveFavorites(entries)
 }
 

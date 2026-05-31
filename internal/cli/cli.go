@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prayjofir/anitr-cli/internal"
@@ -21,6 +22,7 @@ import (
 	"github.com/prayjofir/anitr-cli/internal/models"
 	"github.com/prayjofir/anitr-cli/internal/sources/anizium"
 	"github.com/prayjofir/anitr-cli/internal/sources/aniziumfree"
+	"github.com/prayjofir/anitr-cli/internal/jikan"
 	"github.com/prayjofir/anitr-cli/internal/ui"
 	"github.com/prayjofir/anitr-cli/internal/ui/tui"
 	"github.com/prayjofir/anitr-cli/internal/utils"
@@ -140,11 +142,8 @@ func MainMenu(cfx *models.App, timestamp time.Time) {
 				favCount++
 			}
 		}
-		favLabel := "⭐ Favoriler"
-		if favCount > 0 {
-			favLabel = fmt.Sprintf("⭐ Favoriler (%d)", favCount)
-		}
-		menuOptions := []string{"Anime Ara", favLabel, "Kaynak Değiştir", "Geçmiş", "Ayarlar", "🗑  Cache Temizle", "Çık"}
+		favLabel := fmt.Sprintf("⭐ Favorilerim (%d)", favCount)
+		menuOptions := []string{"Anime Ara", "🌟 Keşfet (Popüler/Sezonluk)", "📋 MAL İzleme Listem", favLabel, "Geçmiş", "Ayarlar", "🗑  Cache Temizle", "Çık"}
 
 		// Anizium seçiliyse giriş seçeneği ekle
 		if strings.ToLower(*cfx.SelectedSource) == "anizium" {
@@ -178,6 +177,12 @@ func MainMenu(cfx *models.App, timestamp time.Time) {
 
 		case favLabel:
 			favoritesMenu(cfx, timestamp)
+
+		case "🌟 Keşfet (Popüler/Sezonluk)":
+			discoverMenu(cfx, timestamp)
+
+		case "📋 MAL İzleme Listem":
+			malWatchlistMenu(cfx, timestamp)
 
 		case "Anizium'a Giriş Yap", "Anizium: " + func() string {
 			if cfg, err := anizium.LoadConfig(); err == nil && cfg != nil {
@@ -317,7 +322,7 @@ func MainMenu(cfx *models.App, timestamp time.Time) {
 				if strings.ToLower(*cfx.SelectedSource) == "openanime" {
 					animeSlug = historyAnimeId
 				} else {
-					animeId, err = strconv.Atoi(historyAnimeId)
+					animeId, _ = strconv.Atoi(historyAnimeId)
 				}
 
 				// Geçmişten isMovie bilgisini al (film hatasını önlemek için)
@@ -448,11 +453,11 @@ func MainMenu(cfx *models.App, timestamp time.Time) {
 func clearMPVCache() float64 {
 	var totalBytes int64
 
-	// /tmp altındaki geçici anitr dosyaları
+	// Geçici anitr dosyaları
 	tmpPatterns := []string{
-		"/tmp/anitr_sub_*.vtt",
-		"/tmp/anitr-cli*.sock",
-		"/tmp/mpvsocket_*",
+		filepath.Join(os.TempDir(), "anitr_sub_*.vtt"),
+		filepath.Join(os.TempDir(), "anitr-cli*.sock"),
+		filepath.Join(os.TempDir(), "mpvsocket_*"),
 	}
 	for _, pattern := range tmpPatterns {
 		matches, _ := filepath.Glob(pattern)
@@ -800,7 +805,7 @@ func anitrHistory(params internal.UiParams, source string, historyLimit int, Log
 	if readErr != nil {
 		close(done)
 		ui.ClearScreen()
-		err = fmt.Errorf("Geçmiş bulunamadı")
+		err = fmt.Errorf("geçmiş bulunamadı")
 		fmt.Printf("\033[31m[!] %s\033[0m\n", err.Error())
 		utils.LogError(Logger, err)
 		time.Sleep(1500 * time.Millisecond)
@@ -811,7 +816,7 @@ func anitrHistory(params internal.UiParams, source string, historyLimit int, Log
 	if !ok || len(sourceData) == 0 {
 		close(done)
 		ui.ClearScreen()
-		err = fmt.Errorf("Bu kaynak için geçmiş bulunamadı")
+		err = fmt.Errorf("bu kaynak için geçmiş bulunamadı")
 		fmt.Printf("\033[31m[!] %s\033[0m\n", err.Error())
 		time.Sleep(1500 * time.Millisecond)
 		return
@@ -887,7 +892,7 @@ func anitrHistory(params internal.UiParams, source string, historyLimit int, Log
 	ui.ClearScreen()
 
 	if len(items) == 0 {
-		err = fmt.Errorf("Bu kaynak için geçmiş bulunamadı")
+		err = fmt.Errorf("bu kaynak için geçmiş bulunamadı")
 		fmt.Printf("\033[31m[!] %s\033[0m\n", err.Error())
 		time.Sleep(1500 * time.Millisecond)
 		return
@@ -921,7 +926,7 @@ func anitrHistory(params internal.UiParams, source string, historyLimit int, Log
 			}
 		}
 		if chosen == nil {
-			err = fmt.Errorf("Seçilen anime bulunamadı")
+			err = fmt.Errorf("seçilen anime bulunamadı")
 			return
 		}
 
@@ -995,7 +1000,7 @@ func anitrHistory(params internal.UiParams, source string, historyLimit int, Log
 				keys = append(keys, it.Key)
 			}
 			if len(items) == 0 {
-				err = fmt.Errorf("Geçmiş boş")
+				err = fmt.Errorf("geçmiş boş")
 				return
 			}
 			continue
@@ -1073,8 +1078,24 @@ func SearchAnime(source models.AnimeSource, UiMode string, RofiFlags string, Log
 		}, "Aranıyor...", done)
 
 		// API üzerinden arama yap
-		searchData, err := source.GetSearchData(query)
-		if err != nil {
+		// API üzerinden arama yap (Kaynak ve Jikan eşzamanlı)
+		var searchData []models.Anime
+		var sourceErr error
+		var jikanResults []jikan.AnimeBasic
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			searchData, sourceErr = source.GetSearchData(query)
+		}()
+		go func() {
+			defer wg.Done()
+			jikanResults, _ = jikan.SearchAnime(query)
+		}()
+		wg.Wait()
+
+		if sourceErr != nil {
 			close(done)      // spinneri durdur
 			ui.ClearScreen() // ekranı temizle
 
@@ -1109,8 +1130,32 @@ func SearchAnime(source models.AnimeSource, UiMode string, RofiFlags string, Log
 		animeMap := make(map[string]models.Anime)
 
 		for _, item := range searchData {
-			animeNames = append(animeNames, item.Title)
-			animeMap[item.Title] = item
+			displayTitle := item.Title
+
+			if matched := jikan.MatchAnimeTitle(item.Title, jikanResults); matched != nil {
+				jikan.SetMalIDCache(item.Title, matched.MalID)
+				scoreStr := utils.FormatAnimeDetails(matched.Score, matched.Year, matched.Aired.From, matched.Genres)
+				displayTitle = item.Title + scoreStr
+			} else {
+				// Eşleşmeyenleri tekil olarak ara (Jikan Rate Limit: 3 req/sec)
+				time.Sleep(334 * time.Millisecond)
+				specificResults, err := jikan.SearchAnime(item.Title)
+				if err == nil && len(specificResults) > 0 {
+					matchedSpecific := jikan.MatchAnimeTitle(item.Title, specificResults)
+					if matchedSpecific != nil {
+						jikan.SetMalIDCache(item.Title, matchedSpecific.MalID)
+						scoreStr := utils.FormatAnimeDetails(matchedSpecific.Score, matchedSpecific.Year, matchedSpecific.Aired.From, matchedSpecific.Genres)
+						displayTitle = item.Title + scoreStr
+					} else {
+						jikan.SetMalIDCache(item.Title, specificResults[0].MalID)
+						scoreStr := utils.FormatAnimeDetails(specificResults[0].Score, specificResults[0].Year, specificResults[0].Aired.From, specificResults[0].Genres)
+						displayTitle = item.Title + scoreStr
+					}
+				}
+			}
+
+			animeNames = append(animeNames, displayTitle)
+			animeMap[displayTitle] = item
 
 			// Anime türünü belirle (tv veya movie)
 			if item.TitleType != nil {
@@ -1193,7 +1238,19 @@ func favoritesMenu(cfx *models.App, timestamp time.Time) {
 		options := make([]string, 0, len(favs)+1)
 		for _, f := range favs {
 			src := strings.ToUpper(f.Source[:1]) + f.Source[1:]
-			options = append(options, fmt.Sprintf("%s  [%s]", f.Title, src))
+			
+			// Genre struct array oluştur
+			var genres []struct {
+				Name string `json:"name"`
+			}
+			for _, g := range f.Genres {
+				genres = append(genres, struct {
+					Name string `json:"name"`
+				}{Name: g})
+			}
+			
+			scoreStr := utils.FormatAnimeDetails(f.Score, f.Year, f.Aired, genres)
+			options = append(options, fmt.Sprintf("%s%s  [%s]", f.Title, scoreStr, src))
 		}
 		options = append(options, "🗑  Favori Sil")
 
@@ -1249,7 +1306,7 @@ func favoritesMenu(cfx *models.App, timestamp time.Time) {
 
 		animeId := 0
 		animeSlug := ""
-		if fav.Source == "animecix" || fav.Source == "anizium" {
+		if fav.Source == "animecix" || strings.HasPrefix(fav.Source, "anizium") {
 			animeId, _ = strconv.Atoi(fav.ID)
 		} else {
 			animeSlug = fav.ID
@@ -1281,4 +1338,218 @@ func favoritesMenu(cfx *models.App, timestamp time.Time) {
 			false,
 		)
 	}
+}
+func discoverMenu(cfx *models.App, timestamp time.Time) {
+	menuOpts := []string{"🏆 Popüler Animeler (Top)", "🌸 Bu Sezonun Animeleri (Airing)", "Geri"}
+	choice, err := utils.ShowSelection(*cfx, menuOpts, "Keşfet")
+	if err != nil || choice == "Geri" {
+		return
+	}
+
+	var list []jikan.AnimeBasic
+	var fetchErr error
+
+	ui.ClearScreen()
+	fmt.Println("Yükleniyor...")
+	if choice == "🏆 Popüler Animeler (Top)" {
+		list, fetchErr = jikan.GetTopAnime()
+	} else {
+		list, fetchErr = jikan.GetSeasonalAnime()
+	}
+
+	if fetchErr != nil {
+		fmt.Printf("[!] Hata: %s\n", fetchErr)
+		time.Sleep(2 * time.Second)
+		return
+	}
+
+	if len(list) == 0 {
+		fmt.Println("[!] Anime bulunamadı.")
+		time.Sleep(2 * time.Second)
+		return
+	}
+
+	var titles []string
+	animeMap := make(map[string]jikan.AnimeBasic)
+	for _, a := range list {
+		jikan.SetMalIDCache(a.Title, a.MalID)
+		scoreStr := utils.FormatAnimeDetails(a.Score, a.Year, a.Aired.From, a.Genres)
+
+		displayTitle := fmt.Sprintf("%s%s", a.Title, scoreStr)
+		titles = append(titles, displayTitle)
+		animeMap[displayTitle] = a
+	}
+	titles = append(titles, "Geri")
+
+	selectedDisplay, selErr := utils.ShowSelection(*cfx, titles, choice)
+	if selErr != nil || selectedDisplay == "Geri" {
+		return
+	}
+
+	selectedAnimeBasic := animeMap[selectedDisplay]
+	autoSearch(cfx, selectedAnimeBasic.Title, timestamp)
+}
+
+func malWatchlistMenu(cfx *models.App, timestamp time.Time) {
+	cfg, err := config.LoadConfig(filepath.Join(helpers.ConfigDir(), "config.json"))
+	if err != nil || cfg.MALUsername == "" {
+		fmt.Println("[!] MAL Kullanıcı Adı ayarlanmamış. Lütfen Ayarlar menüsünden belirleyin.")
+		time.Sleep(2 * time.Second)
+		return
+	}
+
+	ui.ClearScreen()
+	fmt.Println("Listeniz çekiliyor, lütfen bekleyin...")
+	
+	list, fetchErr := jikan.GetUserWatchlist(cfg.MALUsername)
+	if fetchErr != nil {
+		fmt.Printf("[!] %s\n", fetchErr)
+		time.Sleep(4 * time.Second)
+		return
+	}
+
+	if len(list) == 0 {
+		fmt.Println("[!] İzlediğiniz bir anime bulunamadı veya listeniz gizli.")
+		time.Sleep(2 * time.Second)
+		return
+	}
+
+	var titles []string
+	animeMap := make(map[string]jikan.AnimeBasic)
+	for _, a := range list {
+		jikan.SetMalIDCache(a.Title, a.MalID)
+		scoreStr := utils.FormatAnimeDetails(a.Score, a.Year, a.Aired.From, a.Genres)
+
+		displayTitle := fmt.Sprintf("%s%s", a.Title, scoreStr)
+		titles = append(titles, displayTitle)
+		animeMap[displayTitle] = a
+	}
+	titles = append(titles, "Geri")
+
+	selectedDisplay, selErr := utils.ShowSelection(*cfx, titles, "MAL İzleme Listem")
+	if selErr != nil || selectedDisplay == "Geri" {
+		return
+	}
+
+	selectedAnimeBasic := animeMap[selectedDisplay]
+	autoSearch(cfx, selectedAnimeBasic.Title, timestamp)
+}
+
+func autoSearch(cfx *models.App, query string, timestamp time.Time) {
+	done := make(chan struct{})
+	go ui.ShowLoading(internal.UiParams{
+		Mode:      *cfx.UiMode,
+		RofiFlags: cfx.RofiFlags,
+	}, fmt.Sprintf("'%s' aranıyor...", query), done)
+
+	var searchData []models.Anime
+	var err error
+
+	searchData, err = (*cfx.Source).GetSearchData(query)
+
+	// Bulamazsa ilk iki kelimeyle ara (AnimeciX sezonları tek sayfada topladığı için)
+	if err != nil || len(searchData) == 0 {
+		words := strings.Fields(strings.ReplaceAll(query, ":", " "))
+		if len(words) > 1 {
+			baseTitle := strings.Join(words[:2], " ")
+			searchData, err = (*cfx.Source).GetSearchData(baseTitle)
+		}
+	}
+	close(done)
+
+	if err != nil || len(searchData) == 0 {
+		ui.ClearScreen()
+		fmt.Printf("\033[31m[!] '%s' bulunamadı.\033[0m\n", query)
+		time.Sleep(2 * time.Second)
+		return
+	}
+
+	var wg sync.WaitGroup
+	var jikanResults []jikan.AnimeBasic
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		jikanResults, _ = jikan.SearchAnime(query)
+	}()
+	wg.Wait()
+
+	animeNames := make([]string, len(searchData))
+	animeTypes := make([]string, len(searchData))
+	for i, item := range searchData {
+		displayTitle := item.Title
+		
+		if matched := jikan.MatchAnimeTitle(item.Title, jikanResults); matched != nil {
+			jikan.SetMalIDCache(item.Title, matched.MalID)
+			scoreStr := utils.FormatAnimeDetails(matched.Score, matched.Year, matched.Aired.From, matched.Genres)
+			displayTitle = item.Title + scoreStr
+		} else {
+			// Eşleşmeyenleri tekil olarak ara (Jikan Rate Limit: 3 req/sec)
+			time.Sleep(334 * time.Millisecond)
+			specificResults, err := jikan.SearchAnime(item.Title)
+			if err == nil && len(specificResults) > 0 {
+				matchedSpecific := jikan.MatchAnimeTitle(item.Title, specificResults)
+				if matchedSpecific != nil {
+					jikan.SetMalIDCache(item.Title, matchedSpecific.MalID)
+					scoreStr := utils.FormatAnimeDetails(matchedSpecific.Score, matchedSpecific.Year, matchedSpecific.Aired.From, matchedSpecific.Genres)
+					displayTitle = item.Title + scoreStr
+				} else {
+					jikan.SetMalIDCache(item.Title, specificResults[0].MalID)
+					scoreStr := utils.FormatAnimeDetails(specificResults[0].Score, specificResults[0].Year, specificResults[0].Aired.From, specificResults[0].Genres)
+					displayTitle = item.Title + scoreStr
+				}
+			}
+		}
+		
+		animeNames[i] = displayTitle
+
+		if item.TitleType != nil {
+			ttype := item.TitleType
+			if strings.ToLower(*ttype) == "movie" {
+				animeTypes[i] = "movie"
+			} else {
+				animeTypes[i] = "tv"
+			}
+		} else {
+			animeTypes[i] = "tv"
+		}
+	}
+
+	// Just use the first result automatically or let the user choose if multiple?
+	// It's better to let them choose in case the scraper returns multiple seasons.
+	selectedAnime, isMovie, animeidx := SelectAnime(animeNames, searchData, *cfx.UiMode, false, *cfx.RofiFlags, animeTypes, cfx.Logger)
+	if animeidx == -1 {
+		return
+	}
+
+	// Loading spinner başlat
+	done2 := make(chan struct{})
+	go ui.ShowLoading(internal.UiParams{
+		Mode:      *cfx.UiMode,
+		RofiFlags: cfx.RofiFlags,
+	}, "Yükleniyor...", done2)
+
+	posterURL := selectedAnime.ImageURL
+	if !helpers.IsValidImage(posterURL) {
+		posterURL = "anitrcli"
+	}
+
+	selectedAnimeID, selectedAnimeSlug := utils.GetAnimeIDs(*cfx.Source, selectedAnime)
+
+	episodes, episodeNames, isMovie, selectedSeasonIndex, err := utils.GetEpisodesAndNames(
+		*cfx.Source, isMovie, selectedAnimeID, selectedAnimeSlug, selectedAnime.Title,
+	)
+	close(done2)
+
+	if err != nil {
+		utils.LogError(cfx.Logger, err)
+		return
+	}
+
+	actions.PlayAnimeLoop(
+		*cfx.Source, *cfx.SelectedSource, episodes, episodeNames,
+		selectedAnimeID, selectedAnimeSlug, selectedAnime.Title,
+		isMovie, selectedSeasonIndex, *cfx.UiMode, *cfx.RofiFlags,
+		posterURL, *cfx.DisableRPC, timestamp, *cfx.AnimeHistory, cfx.Logger,
+		false,
+	)
 }

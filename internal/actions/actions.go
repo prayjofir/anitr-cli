@@ -17,6 +17,7 @@ import (
 	"github.com/prayjofir/anitr-cli/internal/dl"
 	"github.com/prayjofir/anitr-cli/internal/helpers"
 	"github.com/prayjofir/anitr-cli/internal/history"
+	"github.com/prayjofir/anitr-cli/internal/jikan"
 	"github.com/prayjofir/anitr-cli/internal/models"
 	"github.com/prayjofir/anitr-cli/internal/player"
 	"github.com/prayjofir/anitr-cli/internal/sources/animecix"
@@ -151,6 +152,73 @@ func PlayAnimeLoop(
 		}
 	}
 
+	var animeScore float64
+	var animeYear int
+	var animeAired string
+	var animeGenres []string
+
+	// Anime detaylarını bir kere çek (Özet hariç kompakt form)
+	animeDetailsStr := ""
+	if malID, err := jikan.GetMalIDByTitle(selectedAnimeName); err == nil && malID > 0 {
+		if details, err := jikan.GetAnimeDetails(malID); err == nil && details != nil {
+			animeScore = details.Score
+			animeYear = details.Year
+			if animeYear == 0 && details.Aired.From != "" && len(details.Aired.From) >= 4 {
+				animeYear, _ = strconv.Atoi(details.Aired.From[:4])
+			}
+			animeAired = details.Aired.From
+			for _, g := range details.Genres {
+				animeGenres = append(animeGenres, g.Name)
+			}
+
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("=== %s ===\n", selectedAnimeName))
+			
+			if animeYear > 0 {
+				sb.WriteString(fmt.Sprintf("Puan: ⭐ %.2f/10  |  Çıkış Yılı: %d  |  Durum: %s\n", details.Score, animeYear, details.Status))
+			} else {
+				sb.WriteString(fmt.Sprintf("Puan: ⭐ %.2f/10  |  Durum: %s\n", details.Score, details.Status))
+			}
+			
+			genres := []string{}
+			for _, g := range details.Genres {
+				genres = append(genres, g.Name)
+			}
+			if len(genres) > 0 {
+				sb.WriteString(fmt.Sprintf("Türler: %s\n", strings.Join(genres, ", ")))
+			}
+			
+			relations := []string{}
+			for _, r := range details.Relations {
+				relLower := strings.ToLower(r.Relation)
+				if relLower == "other" || relLower == "character" {
+					continue
+				}
+				
+				names := []string{}
+				for i, e := range r.Entry {
+					if i >= 2 {
+						names = append(names, "...")
+						break
+					}
+					names = append(names, e.Name)
+				}
+				relations = append(relations, fmt.Sprintf("- %s: %s", r.Relation, strings.Join(names, ", ")))
+			}
+			if len(relations) > 0 {
+				sb.WriteString(fmt.Sprintf("\nİlişkili Seriler:\n%s\n", strings.Join(relations, "\n")))
+			}
+			animeDetailsStr = sb.String()
+		} else {
+			animeDetailsStr = fmt.Sprintf("Detaylar alınamadı:\n%v", err)
+		}
+	} else {
+		animeDetailsStr = fmt.Sprintf("MyAnimeList ID bulunamadı:\n%v\n\n(Büyük ihtimalle isim çok uzun veya farklı yazılmış)", err)
+	}
+	
+	// DEBUG YAZDIRMA
+
+
 	for {
 		ui.ClearScreen()
 
@@ -200,7 +268,7 @@ func PlayAnimeLoop(
 			}
 
 			// Seçim arayüzünü göster
-			option, err = utils.ShowSelection(models.App{UiMode: &UiMode, RofiFlags: &RofiFlags}, watchMenu, menuTitle)
+			option, err = utils.ShowSelectionWithPanel(models.App{UiMode: &UiMode, RofiFlags: &RofiFlags}, watchMenu, menuTitle, animeDetailsStr)
 
 			if errors.Is(err, tui.ErrGoBack) {
 				return nil, "", err
@@ -217,13 +285,19 @@ func PlayAnimeLoop(
 		// Favori ekle / çıkar
 		case "⭐ Favorilere Ekle":
 			animeIDStr := fmt.Sprintf("%d", selectedAnimeID)
-			history.AddFavorite(selectedAnimeName, animeIDStr, strings.ToLower(SelectedSource), isMovie)
+			if strings.ToLower(SelectedSource) == "openanime" {
+				animeIDStr = selectedAnimeSlug
+			}
+			history.AddFavorite(selectedAnimeName, animeIDStr, strings.ToLower(SelectedSource), isMovie, animeScore, animeYear, animeAired, animeGenres)
 			ui.ClearScreen()
 			fmt.Printf("\033[32m⭐ '%s' favorilere eklendi!\033[0m\n", selectedAnimeName)
 			time.Sleep(1200 * time.Millisecond)
 
 		case "⭐ Favorilerden Çıkar":
 			animeIDStr := fmt.Sprintf("%d", selectedAnimeID)
+			if strings.ToLower(SelectedSource) == "openanime" {
+				animeIDStr = selectedAnimeSlug
+			}
 			history.RemoveFavorite(animeIDStr, strings.ToLower(SelectedSource))
 			ui.ClearScreen()
 			fmt.Printf("\033[33m⭐ '%s' favorilerden çıkarıldı.\033[0m\n", selectedAnimeName)

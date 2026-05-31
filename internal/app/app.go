@@ -36,7 +36,7 @@ func runMain(cmd *cobra.Command, f *flags.Flags, UiMode string, Logger *models.L
 	// Geçmişi yükle
 	AnimeHistory, err := history.ReadAnimeHistory()
 	if err != nil {
-		utils.LogError(Logger, fmt.Errorf(fmt.Sprintf("Geçmiş yüklenemedi: %s", err)))
+		utils.LogError(Logger, fmt.Errorf("geçmiş yüklenemedi: %w", err))
 	}
 
 	// Uygulama durumunu başlat — varsayılan: AnimeciX
@@ -105,7 +105,8 @@ func runMain(cmd *cobra.Command, f *flags.Flags, UiMode string, Logger *models.L
 func RunApp() {
 	Logger, err := utils.NewLogger()
 	if err != nil {
-		panic(err)
+		fmt.Println("Logger başlatılamadı:", err)
+		os.Exit(1)
 	}
 	defer utils.Close(Logger)
 	log.SetFlags(0)

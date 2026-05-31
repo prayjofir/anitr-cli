@@ -15,6 +15,7 @@ import (
 
 	"github.com/prayjofir/anitr-cli/internal"
 	"github.com/prayjofir/anitr-cli/internal/helpers"
+	"github.com/prayjofir/anitr-cli/internal/jikan"
 	"github.com/prayjofir/anitr-cli/internal/models"
 	"github.com/prayjofir/anitr-cli/internal/player"
 	"github.com/prayjofir/anitr-cli/internal/rpc"
@@ -180,6 +181,35 @@ func GetEpisodesAndNames(source models.AnimeSource, isMovie bool, selectedAnimeI
 
 		// Sezon indeksini belirle
 		selectedSeasonIndex = int(episodes[0].Extra["season_num"].(float64)) - 1
+
+		// Jikan Filler/Recap Fetch (Eğer Jikan hata verirse sessizce geçilir)
+		malID, jikanErr := jikan.GetMalIDByTitle(selectedAnimeName)
+		if jikanErr == nil && malID > 0 {
+			flags, _ := jikan.GetEpisodeFlags(malID)
+			for i, e := range episodes {
+				epNum := 0
+				if e.Extra != nil {
+					if en, ok := e.Extra["episode_num"].(int); ok {
+						epNum = en
+					} else if enf, ok := e.Extra["episode_num"].(float64); ok {
+						epNum = int(enf)
+					}
+				}
+				if epNum == 0 {
+					epNum = e.Number
+				}
+
+				flag := flags[epNum]
+				if flag.Filler {
+					episodeNames[i] = episodeNames[i] + " \033[31m(Filler)\033[0m"
+					episodes[i].Title = episodes[i].Title + " (Filler)"
+				}
+				if flag.Recap {
+					episodeNames[i] = episodeNames[i] + " \033[36m(Recap)\033[0m"
+					episodes[i].Title = episodes[i].Title + " (Recap)"
+				}
+			}
+		}
 	} else {
 		// Film ise sadece tek bir bölüm olarak ayarla
 		episodeNames = []string{selectedAnimeName}
@@ -544,6 +574,39 @@ func GetSelectedEpidodesLinks(
 	return result, nil
 }
 
+
+
+// FormatAnimeDetails returns a formatted string containing the score, year, and genres.
+func FormatAnimeDetails(score float64, year int, airedFrom string, genres []struct{Name string `json:"name"`}) string {
+	genreNames := []string{}
+	for _, g := range genres {
+		genreNames = append(genreNames, g.Name)
+	}
+	
+	y := year
+	if y == 0 && airedFrom != "" && len(airedFrom) >= 4 {
+		y, _ = strconv.Atoi(airedFrom[:4])
+	}
+
+	yearStr := ""
+	if y > 0 {
+		yearStr = fmt.Sprintf(" | %d", y)
+	}
+
+	genreStr := ""
+	if len(genreNames) > 0 {
+		genreStr = " | " + strings.Join(genreNames, ", ")
+	}
+
+	if score > 0 {
+		return fmt.Sprintf(" \033[90m[\033[33m⭐ %.2f\033[90m%s%s]\033[0m", score, yearStr, genreStr)
+	} else if yearStr != "" || genreStr != "" {
+		inner := strings.TrimPrefix(yearStr + genreStr, " | ")
+		return fmt.Sprintf(" \033[90m[%s]\033[0m", inner)
+	}
+	return ""
+}
+
 // Seçilen animenin ID veya slug bilgisini döner
 func GetAnimeIDs(source models.AnimeSource, selectedAnime models.Anime) (int, string) {
 	var selectedAnimeID int
@@ -614,6 +677,17 @@ func ShowSelection(cfx models.App, list []string, label string) (string, error) 
 		RofiFlags: cfx.RofiFlags,
 		List:      &list,
 		Label:     label,
+	})
+}
+
+// ShowSelectionWithPanel, yanında ekstra panel gösteren seçim ekranı
+func ShowSelectionWithPanel(cfx models.App, list []string, label string, rightPanel string) (string, error) {
+	return ui.SelectionList(internal.UiParams{
+		Mode:       *cfx.UiMode,
+		RofiFlags:  cfx.RofiFlags,
+		List:       &list,
+		Label:      label,
+		RightPanel: rightPanel,
 	})
 }
 

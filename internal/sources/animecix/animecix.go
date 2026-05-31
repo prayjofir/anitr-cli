@@ -177,17 +177,17 @@ func (a AnimeCix) GetEpisodesData(params models.EpisodeParams) ([]models.Episode
 func (a AnimeCix) GetWatchData(req models.WatchParams) ([]models.Watch, error) {
 	// Verilerin eksik olup olmadığını kontrol et
 	if req.IsMovie == nil || req.Url == nil || req.Id == nil || req.Extra == nil {
-		return nil, fmt.Errorf("panic")
+		return nil, fmt.Errorf("eksik izleme parametreleri")
 	}
 
 	// Parametreleri al
 	var (
-		isMovie      bool                   = *req.IsMovie
-		url          string                 = *req.Url
-		id           int                    = *req.Id
-		Extra        map[string]interface{} = *req.Extra
-		seasonIndex  int                    = Extra["seasonIndex"].(int)
-		episodeIndex int                    = Extra["episodeIndex"].(int)
+		isMovie      = *req.IsMovie
+		url          = *req.Url
+		id           = *req.Id
+		Extra        = *req.Extra
+		seasonIndex  = Extra["seasonIndex"].(int)
+		episodeIndex = Extra["episodeIndex"].(int)
 	)
 
 	// Eğer filmse, film izleme verilerini al

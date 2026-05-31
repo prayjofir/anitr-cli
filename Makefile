@@ -3,7 +3,7 @@ BINARY_NAME=anitr-cli
 BUILD_DIR=./build
 
 INSTALL_DIR_LINUX=/usr/bin
-INSTALL_DIR_WINDOWS="C:/Program Files/anitr-cli"
+INSTALL_DIR_WINDOWS="$$USERPROFILE/AppData/Local/Programs/anitr-cli"
 INSTALL_DIR_MAC=/usr/local/bin
 
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")

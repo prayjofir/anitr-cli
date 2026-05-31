@@ -287,7 +287,7 @@ func (a Anizium) GetEpisodesData(params models.EpisodeParams) ([]models.Episode,
 
 			title, _ := eMap["name"].(string)
 			if title == "" {
-				title = fmt.Sprintf("Bölüm")
+				title = "Bölüm"
 			}
 			var epNum int
 			if n, ok := eMap["number"].(float64); ok {
@@ -422,21 +422,6 @@ func (a Anizium) GetWatchData(params models.WatchParams) ([]models.Watch, error)
 				break
 			}
 		}
-	}
-
-	// Ses grupları API'den al
-	var soundGroups []string
-	if sgRaw, ok := animeData["sound_group"].([]interface{}); ok {
-		for _, sg := range sgRaw {
-			if sgMap, ok := sg.(map[string]interface{}); ok {
-				if val, ok := sgMap["value"].(string); ok {
-					soundGroups = append(soundGroups, val)
-				}
-			}
-		}
-	}
-	if len(soundGroups) == 0 {
-		soundGroups = []string{"original", "trdub", "endub"}
 	}
 
 	// Değişken tanımlamaları

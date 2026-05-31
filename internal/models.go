@@ -25,6 +25,7 @@ type UiParams struct {
 	RofiFlags          *string   // Rofi'ye özel ek parametreler (varsa)
 	SkipSeasonSeparators bool    // Sezon ayırıcılarını atla (geçmiş menüsü için)
 	SkipAllSeparators    bool    // Tüm separator'ları atla
+	RightPanel           string  // Sağ panelde gösterilecek ekstra içerik
 }
 
 // RPCParams, Discord Rich Presence için gönderilecek bilgileri içerir.

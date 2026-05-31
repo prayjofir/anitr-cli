@@ -332,11 +332,12 @@ func (d slimDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 // Tek seçimli model
 type SelectionListModel struct {
-	list     list.Model
-	quitting bool
-	selected []string
-	err      error
-	width    int
+	list       list.Model
+	quitting   bool
+	selected   []string
+	err        error
+	width      int
+	rightPanel string
 }
 
 func NewSelectionListModel(params internal.UiParams) SelectionListModel {
@@ -388,7 +389,10 @@ func NewSelectionListModel(params internal.UiParams) SelectionListModel {
 		}
 	}
 
-	return SelectionListModel{list: l}
+	return SelectionListModel{
+		list:       l,
+		rightPanel: params.RightPanel,
+	}
 }
 
 func (m SelectionListModel) Init() tea.Cmd { return nil }
@@ -396,7 +400,11 @@ func (m SelectionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		m.list.SetSize(msg.Width, msg.Height)
+		if m.rightPanel != "" {
+			m.list.SetSize(48, msg.Height) // Sabit menü genişliği
+		} else {
+			m.list.SetSize(msg.Width, msg.Height)
+		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -487,7 +495,22 @@ func (m SelectionListModel) View() string {
 	if m.quitting {
 		return ""
 	}
-	return m.list.View()
+	listView := m.list.View()
+	if m.rightPanel != "" {
+		panelWidth := m.width - 48 - 6
+		if panelWidth < 10 {
+			panelWidth = 10
+		}
+		panelBox := lipgloss.NewStyle().
+			Width(panelWidth).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#e45cc0")).
+			Padding(1, 2).
+			MarginLeft(4).
+			Render(m.rightPanel)
+		return lipgloss.JoinHorizontal(lipgloss.Top, listView, panelBox)
+	}
+	return listView
 }
 
 func SelectionList(params internal.UiParams) (string, error) {
@@ -508,11 +531,12 @@ func SelectionList(params internal.UiParams) (string, error) {
 
 // Çoklu seçimli model
 type MultiSelectionListModel struct {
-	list     list.Model
-	selected []string
-	quitting bool
-	err      error
-	width    int
+	list       list.Model
+	selected   []string
+	quitting   bool
+	err        error
+	width      int
+	rightPanel string
 }
 
 func NewMultiSelectionListModel(params internal.UiParams) MultiSelectionListModel {
@@ -563,7 +587,10 @@ func NewMultiSelectionListModel(params internal.UiParams) MultiSelectionListMode
 		}
 	}
 
-	return MultiSelectionListModel{list: l}
+	return MultiSelectionListModel{
+		list:       l,
+		rightPanel: params.RightPanel,
+	}
 }
 
 func (m MultiSelectionListModel) Init() tea.Cmd { return nil }
@@ -693,7 +720,17 @@ func (m MultiSelectionListModel) View() string {
 	if m.quitting {
 		return ""
 	}
-	return m.list.View()
+	listView := m.list.View()
+	if m.rightPanel != "" {
+		panelBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#e45cc0")).
+			Padding(1, 2).
+			MarginLeft(4).
+			Render(m.rightPanel)
+		return lipgloss.JoinHorizontal(lipgloss.Top, listView, panelBox)
+	}
+	return listView
 }
 
 func MultiSelectList(params internal.UiParams) ([]string, error) {
