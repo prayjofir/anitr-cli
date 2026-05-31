@@ -143,7 +143,7 @@ func MainMenu(cfx *models.App, timestamp time.Time) {
 			}
 		}
 		favLabel := fmt.Sprintf("⭐ Favorilerim (%d)", favCount)
-		menuOptions := []string{"Anime Ara", "🌟 Keşfet (Popüler/Sezonluk)", "📋 MAL İzleme Listem", favLabel, "Geçmiş", "Ayarlar", "🗑  Cache Temizle", "Çık"}
+		menuOptions := []string{"Anime Ara", "🌟 Keşfet (Popüler/Sezonluk)", "📋 MAL İzleme Listem", favLabel, "Geçmiş", "Kaynak Değiştir", "Ayarlar", "🗑  Cache Temizle", "Çık"}
 
 		// Anizium seçiliyse giriş seçeneği ekle
 		if strings.ToLower(*cfx.SelectedSource) == "anizium" {
