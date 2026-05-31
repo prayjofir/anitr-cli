@@ -6,8 +6,9 @@
 
 ## 🚀 Özellikler
 
-- **Çoklu Kaynak Desteği:** AnimeciX, Anizium ve Anizium Free üzerinden içerik çekme.
+- **Çoklu Kaynak Desteği:** AnimeciX, Anizium, Anizium Free ve OpenAnime üzerinden içerik çekme.
 - **Anizium Free:** Hesap gerektirmeden Anizium içeriklerini izle — CDN paralel tarama ile otomatik kaynak bulma.
+- **MyAnimeList (Jikan) Entegrasyonu:** Animelerin puan, yayınlanma yılı ve tür gibi bilgilerini MAL üzerinden çeker. Uzun isimli seriler için akıllı fallback arama özelliği içerir.
 - **TUI/GUI Seçim Menüsü:** `fzf` veya `rofi` araçlarını otomatik algılayarak interaktif menüler oluşturur.
 - **MPV Entegrasyonu:** Seçtiğiniz bölümleri doğrudan MPV oynatıcısı üzerinden reklamsız izleme.
 - **Saniye Bazlı Geçmiş ve Devam:** İzlenen bölümler ve konum kaydedilir; geçmişten seçince kaldığın yerden devam eder.
@@ -68,6 +69,7 @@ anitr-cli
 | Kaynak | Hesap | Özellik |
 |--------|-------|---------|
 | **AnimeciX** | ❌ Gerekmez | Türkçe altyazılı anime |
+| **OpenAnime** | ❌ Gerekmez | Çeşitli yabancı sunuculardan geniş arşiv |
 | **Anizium** | ✅ Gerekir | 4K/2K kalite, çoklu dil altyazı, Türkçe dublaj |
 | **Anizium Free** | ❌ Gerekmez | Anizium içerikleri hesapsız, TR altyazı ile |
 
@@ -96,6 +98,7 @@ Ana Menü → **"Ayarlar"** üzerinden yapılandırılabilir:
 | **Tercih Edilen Kalite** | 4K / 2K / 1080p / 720p / 480p / **Sor** | `Sor` seçilirse her izlemede kalite seçim menüsü açılır |
 | **Tercih Edilen Ses** | Japonca / Türkçe Dublaj / İngilizce Dublaj / **Sor** | Otomatik ses seçimi veya her seferinde sor |
 | **Tercih Edilen Altyazı** | tr / en / de / fr / ... | Tercih edilen dil MPV'de ilk altyazı olur |
+| **MAL Kullanıcı Adı** | Kullanıcı Adınız | Jikan API (MyAnimeList) özellikleri için hesabınızı bağlayın |
 | **İndirme Dizini** | Yol | İndirilen bölümlerin kaydedileceği klasör |
 
 Ayarlar `~/.config/anitr-cli/config.json` dosyasına kaydedilir.
