@@ -111,6 +111,7 @@ func RunApp() {
 	defer utils.Close(Logger)
 	log.SetFlags(0)
 
+	cobra.MousetrapHelpText = ""
 	rootCmd, f := flags.NewFlagsCmd()
 
 	commands := rootCmd.Commands()
